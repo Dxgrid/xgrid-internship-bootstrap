@@ -14,15 +14,15 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Check shell script syntax
-        run: bash -n monitor.sh setup.sh
+        run: bash -n "week 1/monitor.sh" "week 1/setup.sh"
 
       - name: Lint Python files
-        run: python3 -m py_compile prometheus_exporter.py create_dashboard.py
+        run: python3 -m py_compile "week 1/prometheus_exporter.py" "week 1/create_dashboard.py"
 
       - name: Validate YAML configs
         run: |
-          python3 -c "import yaml; yaml.safe_load(open('prometheus.yml')); print('✓ prometheus.yml valid')"
-          python3 -c "import yaml; yaml.safe_load(open('docker-compose.yml')); print('✓ docker-compose.yml valid')"
+          python3 -c "import yaml; yaml.safe_load(open('week 1/prometheus.yml')); print('✓ prometheus.yml valid')"
+          python3 -c "import yaml; yaml.safe_load(open('week 1/docker-compose.yml')); print('✓ docker-compose.yml valid')"
 
       - name: Verify JSON log format
         run: |
