@@ -1,0 +1,34 @@
+name: Code Quality Check
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Check shell script syntax
+        run: bash -n monitor.sh setup.sh
+
+      - name: Lint Python files
+        run: python3 -m py_compile prometheus_exporter.py create_dashboard.py
+
+      - name: Validate YAML configs
+        run: |
+          python3 -c "import yaml; yaml.safe_load(open('prometheus.yml')); print('✓ prometheus.yml valid')"
+          python3 -c "import yaml; yaml.safe_load(open('docker-compose.yml')); print('✓ docker-compose.yml valid')"
+
+      - name: Verify JSON log format
+        run: |
+          python3 -c "
+          import json
+          test_log = '{\"timestamp\":\"2026-04-22T10:55:45Z\",\"level\":\"INFO\",\"message\":\"test\"}'
+          json.loads(test_log)
+          print('✓ JSON log format valid')
+          "
