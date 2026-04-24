@@ -12,6 +12,19 @@ import time
 GRAFANA_URL = 'http://localhost:3000'
 GRAFANA_AUTH = ('admin', 'admin')
 
+def get_datasource_uid():
+    """Get the UID of the Prometheus datasource."""
+    try:
+        response = requests.get(
+            f"{GRAFANA_URL}/api/datasources/name/Prometheus",
+            auth=GRAFANA_AUTH
+        )
+        if response.status_code == 200:
+            return response.json().get('uid', 'prometheus')
+        return 'prometheus'
+    except:
+        return 'prometheus'
+
 def setup_datasource():
     """Create Prometheus datasource in Grafana."""
     print("📊 Setting up Prometheus datasource...")
@@ -19,7 +32,7 @@ def setup_datasource():
     datasource_payload = {
         "name": "Prometheus",
         "type": "prometheus",
-        "url": "http://localhost:9090",
+        "url": "http://prometheus:9090",
         "access": "proxy",
         "isDefault": True,
         "jsonData": {}
@@ -45,6 +58,10 @@ def create_simple_dashboard():
     """Create a simple, clean dashboard."""
     print("🎨 Creating dashboard...")
     
+    # Get datasource UID
+    ds_uid = get_datasource_uid()
+    print(f"   Using datasource UID: {ds_uid}")
+    
     dashboard = {
         "dashboard": {
             "title": "System Monitor",
@@ -53,7 +70,7 @@ def create_simple_dashboard():
             "schemaVersion": 35,
             "version": 0,
             "refresh": "5s",
-            "time": {"from": "now-6h", "to": "now"},
+            "time": {"from": "now-1h", "to": "now"},
             "panels": [
                 # CPU Gauge
                 {
@@ -61,7 +78,15 @@ def create_simple_dashboard():
                     "title": "CPU Usage %",
                     "type": "gauge",
                     "gridPos": {"x": 0, "y": 0, "w": 6, "h": 8},
-                    "targets": [{"expr": "node_cpu_usage_percent", "refId": "A"}],
+                    "datasourceUid": ds_uid,
+                    "targets": [
+                        {
+                            "expr": "node_cpu_usage_percent",
+                            "refId": "A",
+                            "datasourceUid": ds_uid,
+                            "datasource": {"type": "prometheus", "uid": ds_uid}
+                        }
+                    ],
                     "options": {
                         "orientation": "auto",
                         "textMode": "auto",
@@ -88,7 +113,15 @@ def create_simple_dashboard():
                     "title": "Memory Usage %",
                     "type": "gauge",
                     "gridPos": {"x": 6, "y": 0, "w": 6, "h": 8},
-                    "targets": [{"expr": "(node_memory_used_bytes / node_memory_total_bytes) * 100", "refId": "A"}],
+                    "datasourceUid": ds_uid,
+                    "targets": [
+                        {
+                            "expr": "(node_memory_used_bytes / node_memory_total_bytes) * 100",
+                            "refId": "A",
+                            "datasourceUid": ds_uid,
+                            "datasource": {"type": "prometheus", "uid": ds_uid}
+                        }
+                    ],
                     "options": {
                         "orientation": "auto",
                         "textMode": "auto",
@@ -115,7 +148,15 @@ def create_simple_dashboard():
                     "title": "Disk Usage %",
                     "type": "gauge",
                     "gridPos": {"x": 12, "y": 0, "w": 6, "h": 8},
-                    "targets": [{"expr": "node_disk_usage_percent", "refId": "A"}],
+                    "datasourceUid": ds_uid,
+                    "targets": [
+                        {
+                            "expr": "node_disk_usage_percent",
+                            "refId": "A",
+                            "datasourceUid": ds_uid,
+                            "datasource": {"type": "prometheus", "uid": ds_uid}
+                        }
+                    ],
                     "options": {
                         "orientation": "auto",
                         "textMode": "auto",
@@ -142,7 +183,15 @@ def create_simple_dashboard():
                     "title": "Active Processes",
                     "type": "stat",
                     "gridPos": {"x": 18, "y": 0, "w": 6, "h": 8},
-                    "targets": [{"expr": "node_processes_total", "refId": "A"}],
+                    "datasourceUid": ds_uid,
+                    "targets": [
+                        {
+                            "expr": "node_processes_total",
+                            "refId": "A",
+                            "datasourceUid": ds_uid,
+                            "datasource": {"type": "prometheus", "uid": ds_uid}
+                        }
+                    ],
                     "options": {
                         "colorMode": "background",
                         "graphMode": "none",
@@ -160,7 +209,16 @@ def create_simple_dashboard():
                     "title": "CPU Load Over Time",
                     "type": "timeseries",
                     "gridPos": {"x": 0, "y": 8, "w": 12, "h": 8},
-                    "targets": [{"expr": "node_cpu_usage_percent", "legendFormat": "CPU %", "refId": "A"}],
+                    "datasourceUid": ds_uid,
+                    "targets": [
+                        {
+                            "expr": "node_cpu_usage_percent",
+                            "legendFormat": "CPU %",
+                            "refId": "A",
+                            "datasourceUid": ds_uid,
+                            "datasource": {"type": "prometheus", "uid": ds_uid}
+                        }
+                    ],
                     "options": {
                         "legend": {"displayMode": "list", "placement": "bottom"},
                         "tooltip": {"mode": "multi"}
@@ -176,7 +234,16 @@ def create_simple_dashboard():
                     "title": "Memory Over Time",
                     "type": "timeseries",
                     "gridPos": {"x": 12, "y": 8, "w": 12, "h": 8},
-                    "targets": [{"expr": "node_memory_used_bytes / 1024 / 1024 / 1024", "legendFormat": "Used (GB)", "refId": "A"}],
+                    "datasourceUid": ds_uid,
+                    "targets": [
+                        {
+                            "expr": "node_memory_used_bytes / 1024 / 1024 / 1024",
+                            "legendFormat": "Used (GB)",
+                            "refId": "A",
+                            "datasourceUid": ds_uid,
+                            "datasource": {"type": "prometheus", "uid": ds_uid}
+                        }
+                    ],
                     "options": {
                         "legend": {"displayMode": "list", "placement": "bottom"},
                         "tooltip": {"mode": "multi"}
@@ -271,7 +338,7 @@ def main():
         print("   - docker compose up -d")
         print("   - python3 prometheus_exporter.py")
         print("   - ./monitor.sh")
+        print("   - node_exporter (optional, for additional metrics)")
 
 if __name__ == '__main__':
     main()
-
