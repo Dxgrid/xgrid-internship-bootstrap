@@ -4,7 +4,7 @@ LOG_FILE="monitor.log"
 REFRESH_RATE=1
 
 generate_trace_id() {
-    cat /dev/urandom | tr -dc 'a-f0-9' | fold -w 8 | head -n 1
+    LC_ALL=C tr -dc 'a-f0-9' < /dev/urandom | fold -w 8 | head -n 1
 }
 
 log_json() {
