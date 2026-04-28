@@ -32,7 +32,7 @@ pipeline {
                         sh 'terraform init -input=false'
                         sh 'terraform apply -auto-approve -input=false'
                         script {
-                            env.TARGET_IP = sh(script: 'terraform output -raw ec2_public_ip', returnStdout: true).trim()
+                            env.TARGET_IP = sh(script: 'terraform output -raw public_ip', returnStdout: true).trim()
                         }
                     }
                 }
