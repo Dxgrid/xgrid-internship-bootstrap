@@ -59,5 +59,10 @@ resource "aws_instance" "app_server" {
 
   # User data script runs at instance launch to install Docker and dependencies
   user_data = file("${path.module}/user_data.sh")
+
+  tags = {
+    Name        = "${var.project_name}-app-server"
+    Environment = "Dev"
+    Project     = var.project_name
   }
 }
