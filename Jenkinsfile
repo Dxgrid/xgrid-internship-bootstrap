@@ -21,8 +21,20 @@ pipeline {
 
     stages {
 
-        // Stage 1: Terraform Provision EC2 (Multibranch checks out SCM automatically)
-        stage('Terraform Provision') {
+        // Stage 1: Terraform Validation
+        stage('Terraform Validate') {
+            steps {
+                dir("${TF_DIR}") {
+                    sh 'terraform version'
+                    sh 'terraform fmt -check -recursive .'
+                    sh 'terraform validate'
+                    echo '✅ Terraform configuration is valid'
+                }
+            }
+        }
+
+        // Stage 2: Terraform Plan
+        stage('Terraform Plan') {
             steps {
                 dir("${TF_DIR}") {
                     withCredentials([
@@ -30,17 +42,32 @@ pipeline {
                         string(credentialsId: 'aws-secret-access-key', variable: 'AWS_SECRET_ACCESS_KEY')
                     ]) {
                         sh 'terraform init -input=false'
-                        sh 'terraform apply -auto-approve -input=false'
+                        sh 'terraform plan -input=false -out=tfplan'
+                        echo '📋 Terraform plan saved to tfplan'
+                    }
+                }
+            }
+        }
+
+        // Stage 3: Terraform Apply (uses plan from previous stage)
+        stage('Terraform Provision') {
+            steps {
+                dir("${TF_DIR}") {
+                    withCredentials([
+                        string(credentialsId: 'aws-access-key-id', variable: 'AWS_ACCESS_KEY_ID'),
+                        string(credentialsId: 'aws-secret-access-key', variable: 'AWS_SECRET_ACCESS_KEY')
+                    ]) {
+                        sh 'terraform apply -input=false tfplan'
                         script {
                             env.TARGET_IP = sh(script: 'terraform output -raw public_ip', returnStdout: true).trim()
                         }
                     }
                 }
-                echo "EC2 Provisioned. IP: ${env.TARGET_IP}"
+                echo "🎯 EC2 Provisioned. IP: ${env.TARGET_IP}"
             }
         }
 
-        // Stage 3: Wait for SSH to be Ready
+        // Stage 4: Wait for SSH to be Ready
         stage('Wait for SSH Ready') {
             steps {
                 script {
@@ -62,7 +89,7 @@ pipeline {
             }
         }
 
-        // Stage 4: Transfer Files to EC2
+        // Stage 5: Transfer Files to EC2
         stage('Transfer Files') {
             steps {
                 sshagent(credentials: ['ec2-ssh-key']) {
@@ -75,7 +102,7 @@ pipeline {
             }
         }
 
-        // Stage 5: Build and Deploy Docker Container
+        // Stage 6: Build and Deploy Docker Container
         stage('Build and Deploy Container') {
             steps {
                 sshagent(credentials: ['ec2-ssh-key']) {
@@ -102,7 +129,7 @@ EOF
             }
         }
 
-        // Stage 6: Run System Audit
+        // Stage 7: Run System Audit
         stage('Run System Audit') {
             steps {
                 script {
@@ -129,10 +156,24 @@ EOF
         }
 
         success {
-            echo '''
-SUCCESS! Deployment Complete
-Health API: http://${TARGET_IP}:8000/health
-            '''
+            echo """
+===========================================
+✅ SUCCESS! Deployment Complete
+===========================================
+
+🌐 Health API Endpoint:
+   http://${env.TARGET_IP}:8000/health
+
+📊 System Status:
+   - EC2 Instance: Running
+   - Docker Container: Deployed
+   - Health Check: Passing
+   - Audit Results: ✓ OK
+
+Next Steps:
+- Monitor the health endpoint
+- Check CloudWatch logs if needed
+            """
         }
 
         failure {
