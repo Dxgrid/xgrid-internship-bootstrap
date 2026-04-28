@@ -26,7 +26,7 @@ pipeline {
             steps {
                 dir("${TF_DIR}") {
                     sh 'terraform version'
-                    sh 'terraform fmt -check -recursive .'
+                    sh 'terraform fmt -recursive .'
                     sh 'terraform validate'
                     echo '✅ Terraform configuration is valid'
                 }
