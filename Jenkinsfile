@@ -95,6 +95,44 @@ pipeline {
             }
         }
 
+        // Stage 4.5: Ensure Docker is Installed
+        stage('Install Docker') {
+            steps {
+                sshagent(credentials: ['ec2-ssh-key']) {
+                    sh '''
+                        echo "🔍 Checking if Docker is installed..."
+                        if ssh -o StrictHostKeyChecking=no -o BatchMode=yes ${SSH_USER}@${TARGET_IP} "docker --version" 2>/dev/null; then
+                            echo "✅ Docker already installed"
+                        else
+                            echo "⚙️ Installing Docker on EC2..."
+                            ssh -o StrictHostKeyChecking=no -o BatchMode=yes ${SSH_USER}@${TARGET_IP} << INSTALL_DOCKER
+set -e
+echo "Updating package manager..."
+sudo apt-get update -qq
+
+echo "Installing Docker and dependencies..."
+sudo apt-get install -y -qq docker.io docker-compose curl wget
+
+echo "Adding ubuntu user to docker group..."
+sudo usermod -aG docker ubuntu
+
+echo "Starting Docker service..."
+sudo systemctl start docker
+sudo systemctl enable docker
+
+echo "Waiting for Docker daemon..."
+sleep 5
+
+echo "Verifying Docker installation..."
+docker --version
+INSTALL_DOCKER
+                            echo "✅ Docker installed successfully"
+                        fi
+                    '''
+                }
+            }
+        }
+
         // Stage 5: Transfer Files to EC2
         stage('Transfer Files') {
             steps {
