@@ -12,11 +12,12 @@ git
 github
 github-branch-source
 
-# Credentials
+# Credentials & SSH
 credentials
 credentials-binding
 plain-credentials
 ssh-credentials
+ssh-agent
 
 # Jenkins Configuration as Code (JCasC) - fixes the credentials persistence issue
 configuration-as-code

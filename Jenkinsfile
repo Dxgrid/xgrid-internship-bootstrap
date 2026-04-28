@@ -47,7 +47,7 @@ pipeline {
                     echo "Waiting for SSH on ${env.TARGET_IP}:22..."
                     timeout(time: 5, unit: 'MINUTES') {
                         waitUntil(initialRecurrencePeriod: 10000) {
-                            def ready = sh(script: "nc -zw5 ${env.TARGET_IP} 22", returnStatus: true)
+                            def ready = sh(script: '''bash -c "exec 3<>/dev/tcp/${TARGET_IP}/22" 2>/dev/null && exit 0 || exit 1''', returnStatus: true)
                             if (ready == 0) {
                                 echo 'SSH is ready!'
                                 return true
