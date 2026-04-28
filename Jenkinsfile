@@ -25,10 +25,16 @@ pipeline {
         stage('Terraform Validate') {
             steps {
                 dir("${TF_DIR}") {
-                    sh 'terraform version'
-                    sh 'terraform fmt -recursive .'
-                    sh 'terraform validate'
-                    echo '✅ Terraform configuration is valid'
+                    withCredentials([
+                        string(credentialsId: 'aws-access-key-id', variable: 'AWS_ACCESS_KEY_ID'),
+                        string(credentialsId: 'aws-secret-access-key', variable: 'AWS_SECRET_ACCESS_KEY')
+                    ]) {
+                        sh 'terraform version'
+                        sh 'terraform init -input=false'
+                        sh 'terraform fmt -recursive .'
+                        sh 'terraform validate'
+                        echo '✅ Terraform configuration is valid'
+                    }
                 }
             }
         }
