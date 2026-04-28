@@ -21,15 +21,7 @@ pipeline {
 
     stages {
 
-        // Stage 1: Checkout
-        stage('Checkout') {
-            steps {
-                echo 'Checking out source from Git...'
-                sh 'git clone https://github.com/Dxgrid/xgrid-internship-bootstrap.git . || git pull'
-            }
-        }
-
-        // Stage 2: Terraform Provision EC2
+        // Stage 1: Terraform Provision EC2 (Multibranch checks out SCM automatically)
         stage('Terraform Provision') {
             steps {
                 dir("${TF_DIR}") {
