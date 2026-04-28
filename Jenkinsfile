@@ -80,7 +80,7 @@ pipeline {
                     echo "Waiting for SSH on ${env.TARGET_IP}:22..."
                     timeout(time: 5, unit: 'MINUTES') {
                         waitUntil(initialRecurrencePeriod: 10000) {
-                            def ready = sh(script: '''bash -c "exec 3<>/dev/tcp/${TARGET_IP}/22" 2>/dev/null && exit 0 || exit 1''', returnStatus: true)
+                            def ready = sh(script: """bash -c "exec 3<>/dev/tcp/${env.TARGET_IP}/22" 2>/dev/null && exit 0 || exit 1""", returnStatus: true)
                             if (ready == 0) {
                                 echo 'SSH is ready!'
                                 return true
@@ -99,7 +99,7 @@ pipeline {
         stage('Install Docker') {
             steps {
                 sshagent(credentials: ['ec2-ssh-key']) {
-                    sh '''
+                    sh """
                         echo "🔍 Checking if Docker is installed..."
                         if ssh -o StrictHostKeyChecking=no -o BatchMode=yes ${SSH_USER}@${TARGET_IP} "docker --version" 2>/dev/null; then
                             echo "✅ Docker already installed"
@@ -128,7 +128,7 @@ docker --version
 INSTALL_DOCKER
                             echo "✅ Docker installed successfully"
                         fi
-                    '''
+                    """
                 }
             }
         }
@@ -137,7 +137,7 @@ INSTALL_DOCKER
         stage('Transfer Files') {
             steps {
                 sshagent(credentials: ['ec2-ssh-key']) {
-                    sh '''
+                    sh """
                         echo "📁 Transferring application files..."
                         echo "Source: ${APP_DIR}"
                         echo "Destination: ${SSH_USER}@${TARGET_IP}:/home/${SSH_USER}/"
@@ -149,7 +149,7 @@ INSTALL_DOCKER
                         
                         echo "✅ Verifying files transferred to EC2..."
                         ssh -o StrictHostKeyChecking=no -o BatchMode=yes ${SSH_USER}@${TARGET_IP} "ls -la /home/${SSH_USER}/"
-                    '''
+                    """
                 }
                 echo '✅ Files transferred successfully'
             }
@@ -159,7 +159,7 @@ INSTALL_DOCKER
         stage('Build and Deploy Container') {
             steps {
                 sshagent(credentials: ['ec2-ssh-key']) {
-                    sh '''
+                    sh """
                         ssh -o StrictHostKeyChecking=no -o BatchMode=yes ${SSH_USER}@${TARGET_IP} << EOF
                         set -e
                         
@@ -196,7 +196,7 @@ INSTALL_DOCKER
                         echo "🌐 Testing health endpoint..."
                         curl -s http://localhost:${APP_PORT}/health | head -20 || echo "⚠️ Health endpoint not yet responding"
 EOF
-                    '''
+                    """
                 }
             }
         }
@@ -206,7 +206,7 @@ EOF
             steps {
                 script {
                     sshagent(credentials: ['ec2-ssh-key']) {
-                        def auditStatus = sh(script: '''
+                        def auditStatus = sh(script: """
                             echo "📊 Running system audit on ${TARGET_IP}..."
                             ssh -o StrictHostKeyChecking=no -o BatchMode=yes ${SSH_USER}@${TARGET_IP} << AUDIT_EOF
                             echo "======================================="
@@ -215,7 +215,7 @@ EOF
                             chmod +x /home/${SSH_USER}/system_audit.sh
                             bash /home/${SSH_USER}/system_audit.sh
 AUDIT_EOF
-                        ''', returnStatus: true)
+                        """, returnStatus: true)
                         
                         if (auditStatus != 0) {
                             error("❌ System audit failed with exit code ${auditStatus}")
