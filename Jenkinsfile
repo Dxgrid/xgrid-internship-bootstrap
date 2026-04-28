@@ -100,11 +100,20 @@ pipeline {
             steps {
                 sshagent(credentials: ['ec2-ssh-key']) {
                     sh '''
+                        echo "📁 Transferring application files..."
+                        echo "Source: ${APP_DIR}"
+                        echo "Destination: ${SSH_USER}@${TARGET_IP}:/home/${SSH_USER}/"
                         scp -o StrictHostKeyChecking=no -o BatchMode=yes -r "${APP_DIR}" ${SSH_USER}@${TARGET_IP}:/home/${SSH_USER}/
+                        
+                        echo "📋 Transferring audit script..."
+                        echo "Source: ${AUDIT_SCRIPT}"
                         scp -o StrictHostKeyChecking=no -o BatchMode=yes "${AUDIT_SCRIPT}" ${SSH_USER}@${TARGET_IP}:/home/${SSH_USER}/
+                        
+                        echo "✅ Verifying files transferred to EC2..."
+                        ssh -o StrictHostKeyChecking=no -o BatchMode=yes ${SSH_USER}@${TARGET_IP} "ls -la /home/${SSH_USER}/"
                     '''
                 }
-                echo 'Files transferred successfully'
+                echo '✅ Files transferred successfully'
             }
         }
 
@@ -113,22 +122,41 @@ pipeline {
             steps {
                 sshagent(credentials: ['ec2-ssh-key']) {
                     sh '''
-                        ssh -o StrictHostKeyChecking=no -o BatchMode=yes ${SSH_USER}@${TARGET_IP} << 'EOF'
+                        ssh -o StrictHostKeyChecking=no -o BatchMode=yes ${SSH_USER}@${TARGET_IP} << EOF
                         set -e
                         
+                        echo "🚀 ======================================="
+                        echo "Build and Deploy Stage"
+                        echo "======================================="
+                        echo "Container: ${CONTAINER_NAME}"
+                        echo "App Port: ${APP_PORT}"
+                        echo "SSH User: ${SSH_USER}"
+                        echo ""
+                        
+                        echo "📁 Checking if app directory exists..."
+                        ls -la /home/${SSH_USER}/app || echo "⚠️ App directory not found!"
+                        
+                        echo ""
                         echo "Stopping old container if it exists..."
                         docker stop ${CONTAINER_NAME} || true
                         docker rm ${CONTAINER_NAME} || true
                         
-                        echo "Building Docker image..."
+                        echo ""
+                        echo "🐳 Building Docker image..."
                         cd /home/${SSH_USER}/app
                         docker build -t ${CONTAINER_NAME}:latest .
                         
-                        echo "Starting new container..."
+                        echo ""
+                        echo "🚀 Starting new container..."
                         docker run -d --name ${CONTAINER_NAME} --restart unless-stopped -p ${APP_PORT}:${APP_PORT} ${CONTAINER_NAME}:latest
                         
-                        echo "Container is running:"
+                        echo ""
+                        echo "✅ Container is running:"
                         docker ps | grep ${CONTAINER_NAME}
+                        
+                        echo ""
+                        echo "🌐 Testing health endpoint..."
+                        curl -s http://localhost:${APP_PORT}/health | head -20 || echo "⚠️ Health endpoint not yet responding"
 EOF
                     '''
                 }
@@ -141,14 +169,20 @@ EOF
                 script {
                     sshagent(credentials: ['ec2-ssh-key']) {
                         def auditStatus = sh(script: '''
-                            ssh -o StrictHostKeyChecking=no -o BatchMode=yes ${SSH_USER}@${TARGET_IP} \
-                            'chmod +x /home/${SSH_USER}/system_audit.sh && bash /home/${SSH_USER}/system_audit.sh'
+                            echo "📊 Running system audit on ${TARGET_IP}..."
+                            ssh -o StrictHostKeyChecking=no -o BatchMode=yes ${SSH_USER}@${TARGET_IP} << AUDIT_EOF
+                            echo "======================================="
+                            echo "System Audit Report"
+                            echo "======================================="
+                            chmod +x /home/${SSH_USER}/system_audit.sh
+                            bash /home/${SSH_USER}/system_audit.sh
+AUDIT_EOF
                         ''', returnStatus: true)
                         
                         if (auditStatus != 0) {
-                            error("System audit failed with exit code ${auditStatus}")
+                            error("❌ System audit failed with exit code ${auditStatus}")
                         }
-                        echo 'Audit passed successfully!'
+                        echo '✅ Audit passed successfully!'
                     }
                 }
             }

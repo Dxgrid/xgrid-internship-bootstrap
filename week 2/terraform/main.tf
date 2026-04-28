@@ -55,11 +55,9 @@ resource "aws_instance" "app_server" {
   ami                    = data.aws_ami.ubuntu.id
   instance_type          = var.instance_type
   vpc_security_group_ids = [aws_security_group.app_sg.id]
-  key_name               = var.key_pair_name 
+  key_name               = var.key_pair_name
 
-  tags = {
-    Name        = "${var.project_name}-instance"
-    Environment = "Dev"
-    Owner       = "Intern-Sprint"
+  # User data script runs at instance launch to install Docker and dependencies
+  user_data = file("${path.module}/user_data.sh")
   }
 }
