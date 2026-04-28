@@ -44,16 +44,16 @@ echo ""
 # ============================================
 echo -e "${BLUE}[2] Checking Ports...${NC}"
 
-# Check if port 22 is open (SSH)
-if netstat -tuln 2>/dev/null | grep ":22 " > /dev/null; then
+# Check if port 22 is open (SSH) - use ss instead of netstat
+if ss -tuln 2>/dev/null | grep ":22 " > /dev/null || netstat -tuln 2>/dev/null | grep ":22 " > /dev/null; then
     echo -e "${GREEN}✓ Port 22 (SSH) is open${NC}"
 else
     echo -e "${RED}✗ Port 22 (SSH) is NOT open${NC}"
     FAILED=1
 fi
 
-# Check if port 8000 is open (API)
-if netstat -tuln 2>/dev/null | grep ":8000 " > /dev/null; then
+# Check if port 8000 is open (API) - use ss instead of netstat
+if ss -tuln 2>/dev/null | grep ":8000 " > /dev/null || netstat -tuln 2>/dev/null | grep ":8000 " > /dev/null; then
     echo -e "${GREEN}✓ Port 8000 (API) is open${NC}"
 else
     echo -e "${RED}✗ Port 8000 (API) is NOT open${NC}"
