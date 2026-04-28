@@ -5,7 +5,7 @@ FROM python:3.11-slim AS builder
 WORKDIR /build
 
 # Copy requirements first (leverage Docker layer caching)
-COPY app/requirements.txt .
+COPY requirements.txt .
 
 # Install dependencies with no cache to minimize layer size
 RUN pip install --no-cache-dir --user -r requirements.txt
@@ -29,7 +29,7 @@ RUN useradd -m -u 1000 appuser
 COPY --from=builder --chown=appuser:appuser /root/.local /home/appuser/.local
 
 # Copy application code with correct ownership
-COPY --chown=appuser:appuser app/main.py .
+COPY --chown=appuser:appuser main.py .
 
 # Set environment variables
 ENV PATH=/home/appuser/.local/bin:$PATH \
