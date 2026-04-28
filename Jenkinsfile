@@ -100,8 +100,8 @@ pipeline {
             steps {
                 sshagent(credentials: ['ec2-ssh-key']) {
                     sh '''
-                        scp -o StrictHostKeyChecking=no -o BatchMode=yes -r ${APP_DIR} ${SSH_USER}@${TARGET_IP}:/home/${SSH_USER}/
-                        scp -o StrictHostKeyChecking=no -o BatchMode=yes ${AUDIT_SCRIPT} ${SSH_USER}@${TARGET_IP}:/home/${SSH_USER}/
+                        scp -o StrictHostKeyChecking=no -o BatchMode=yes -r "${APP_DIR}" ${SSH_USER}@${TARGET_IP}:/home/${SSH_USER}/
+                        scp -o StrictHostKeyChecking=no -o BatchMode=yes "${AUDIT_SCRIPT}" ${SSH_USER}@${TARGET_IP}:/home/${SSH_USER}/
                     '''
                 }
                 echo 'Files transferred successfully'
