@@ -1,0 +1,24 @@
+# Jenkins Plugins - Required for CI/CD pipeline
+# Pipeline / Declarative Pipeline
+workflow-aggregator
+pipeline-model-definition
+
+# Docker integration (correct names!)
+docker-workflow
+docker-plugin
+
+# Git & GitHub
+git
+github
+github-branch-source
+
+# Credentials
+credentials
+credentials-binding
+plain-credentials
+
+# General recommended
+antisamy-markup-formatter
+build-timeout
+timestamper
+ws-cleanup
