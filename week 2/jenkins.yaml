@@ -1,0 +1,34 @@
+jenkins:
+  securityRealm:
+    local:
+      allowsSignup: false
+  authorizationStrategy:
+    loggedInUsersCanDoAnything:
+      allowAnonymousRead: false
+
+unclassified:
+  location:
+    url: "http://localhost:8080/"
+
+credentials:
+  system:
+    domainCredentials:
+      - credentials:
+          - string:
+              scope: GLOBAL
+              id: "aws-access-key-id"
+              description: "AWS Access Key ID"
+              secret: "${AWS_ACCESS_KEY_ID}"
+          - string:
+              scope: GLOBAL
+              id: "aws-secret-access-key"
+              description: "AWS Secret Access Key"
+              secret: "${AWS_SECRET_ACCESS_KEY}"
+          - basicSSHUserPrivateKey:
+              scope: GLOBAL
+              id: "ec2-ssh-key"
+              description: "EC2 SSH Private Key for Ubuntu instances"
+              username: "ubuntu"
+              privateKeySource:
+                directEntry:
+                  privateKey: "${EC2_SSH_PRIVATE_KEY}"

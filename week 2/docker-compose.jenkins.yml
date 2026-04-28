@@ -16,6 +16,13 @@ services:
     environment:
       - JENKINS_OPTS=--httpPort=8080
       - JAVA_OPTS=-Xmx512m -Xms512m
+      # JCasC configuration
+      - CASC_JENKINS_CONFIG=/var/jenkins_home/jenkins.yaml
+      # AWS Credentials - passed from host environment
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      # EC2 SSH Key - passed from host environment
+      - EC2_SSH_PRIVATE_KEY=${EC2_SSH_PRIVATE_KEY}
     
     # Run as root to access Docker socket
     user: root
@@ -25,7 +32,10 @@ services:
       # 1. Jenkins home directory (persists jobs, configs, plugins)
       - jenkins_home:/var/jenkins_home
       
-      # 2. Docker socket passthrough (allows Jenkins to run Docker commands)
+      # 2. JCasC configuration (auto-loaded on startup)
+      - ./jenkins.yaml:/var/jenkins_home/jenkins.yaml:ro
+      
+      # 3. Docker socket passthrough (allows Jenkins to run Docker commands)
       - /var/run/docker.sock:/var/run/docker.sock
     
     # Permissions fix
