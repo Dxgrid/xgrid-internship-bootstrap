@@ -104,8 +104,19 @@ pipeline {
                         if ssh -o StrictHostKeyChecking=no -o BatchMode=yes ${SSH_USER}@${TARGET_IP} "docker --version" 2>/dev/null; then
                             echo "✅ Docker already installed"
                         else
-                            echo "⚙️ Installing Docker on EC2..."
-                            ssh -o StrictHostKeyChecking=no -o BatchMode=yes ${SSH_USER}@${TARGET_IP} << INSTALL_DOCKER
+                            echo "⚙️ Waiting for user_data script to complete (apt lock release)..."
+                            ssh -o StrictHostKeyChecking=no -o BatchMode=yes ${SSH_USER}@${TARGET_IP} << WAIT_APT
+# Wait for apt lock to be released (user_data script may still be running)
+for i in {1..60}; do
+  if ! sudo lsof /var/lib/apt/lists/lock 2>/dev/null | grep -q apt; then
+    echo "✅ apt lock released - user_data complete"
+    break
+  fi
+  echo "⏳ Waiting for apt lock... (\$i/60)"
+  sleep 5
+done
+
+echo "⚙️ Installing Docker on EC2..."
 set -e
 echo "Updating package manager..."
 sudo apt-get update -qq
@@ -125,7 +136,7 @@ sleep 5
 
 echo "Verifying Docker installation..."
 docker --version
-INSTALL_DOCKER
+WAIT_APT
                             echo "✅ Docker installed successfully"
                         fi
                     """
