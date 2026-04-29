@@ -1,3 +1,8 @@
+# 0. Fetch the current public IP of the runner
+data "http" "my_ip" {
+  url = "http://ipv4.icanhazip.com"
+}
+
 # 1. Dynamically fetch the latest Ubuntu 22.04 LTS AMI
 data "aws_ami" "ubuntu" {
   most_recent = true
@@ -19,12 +24,12 @@ resource "aws_security_group" "app_sg" {
   name        = "${var.project_name}-sg"
   description = "Allow SSH and App Port"
 
-  # SSH Access
+  # SSH Access (Restricted to your current IP)
   ingress {
     from_port   = 22
     to_port     = 22
     protocol    = "tcp"
-    cidr_blocks = [var.allowed_ssh_ip]
+    cidr_blocks = ["${chomp(data.http.my_ip.response_body)}/32"]
   }
 
   # Application Access
@@ -56,6 +61,13 @@ resource "aws_instance" "app_server" {
   instance_type          = var.instance_type
   vpc_security_group_ids = [aws_security_group.app_sg.id]
   key_name               = var.key_pair_name 
+
+  # Encrypt the root volume for security compliance
+  root_block_device {
+    encrypted   = true
+    volume_type = "gp3"
+    volume_size = 8
+  }
 
   tags = {
     Name        = "${var.project_name}-instance"

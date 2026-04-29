@@ -17,9 +17,10 @@ variable "instance_type" {
 }
 
 variable "allowed_ssh_ip" {
-  description = "The CIDR block allowed to SSH into the instance (e.g., your public IP /32)"
+  description = "The CIDR block allowed to SSH into the instance (use your-ip/32 for security)"
   type        = string
-  default     = "0.0.0.0/0" # PLACEHOLDER: Replace with your IP for security
+  # Removed 0.0.0.0/0 default for security. 
+  # Will be overridden by dynamic data source in main.tf or a tfvars file.
 }
 
 variable "app_port" {
