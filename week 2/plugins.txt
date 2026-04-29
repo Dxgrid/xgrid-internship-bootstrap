@@ -18,6 +18,8 @@ credentials-binding
 plain-credentials
 ssh-credentials
 ssh-agent
+aws-credentials
+pipeline-aws
 
 # Jenkins Configuration as Code (JCasC) - fixes the credentials persistence issue
 configuration-as-code

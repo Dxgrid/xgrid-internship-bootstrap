@@ -25,10 +25,7 @@ pipeline {
         stage('Terraform Validate') {
             steps {
                 dir("${TF_DIR}") {
-                    withCredentials([
-                        string(credentialsId: 'aws-access-key-id', variable: 'AWS_ACCESS_KEY_ID'),
-                        string(credentialsId: 'aws-secret-access-key', variable: 'AWS_SECRET_ACCESS_KEY')
-                    ]) {
+                    withAWS(credentials: 'aws-credentials', region: 'us-east-1') {
                         sh 'terraform version'
                         sh 'terraform init -input=false'
                         sh 'terraform fmt -recursive .'
@@ -43,10 +40,7 @@ pipeline {
         stage('Terraform Plan') {
             steps {
                 dir("${TF_DIR}") {
-                    withCredentials([
-                        string(credentialsId: 'aws-access-key-id', variable: 'AWS_ACCESS_KEY_ID'),
-                        string(credentialsId: 'aws-secret-access-key', variable: 'AWS_SECRET_ACCESS_KEY')
-                    ]) {
+                    withAWS(credentials: 'aws-credentials', region: 'us-east-1') {
                         sh 'terraform init -input=false'
                         sh 'terraform plan -input=false -out=tfplan'
                         echo '📋 Terraform plan saved to tfplan'
@@ -59,10 +53,7 @@ pipeline {
         stage('Terraform Provision') {
             steps {
                 dir("${TF_DIR}") {
-                    withCredentials([
-                        string(credentialsId: 'aws-access-key-id', variable: 'AWS_ACCESS_KEY_ID'),
-                        string(credentialsId: 'aws-secret-access-key', variable: 'AWS_SECRET_ACCESS_KEY')
-                    ]) {
+                    withAWS(credentials: 'aws-credentials', region: 'us-east-1') {
                         sh 'terraform apply -input=false tfplan'
                         script {
                             env.TARGET_IP = sh(script: 'terraform output -raw public_ip', returnStdout: true).trim()
@@ -149,14 +140,13 @@ WAIT_APT
             steps {
                 sshagent(credentials: ['ec2-ssh-key']) {
                     sh """
-                        echo "📁 Transferring application files..."
+                        echo "📁 Transferring application files via rsync..."
                         echo "Source: ${APP_DIR}"
-                        echo "Destination: ${SSH_USER}@${TARGET_IP}:/home/${SSH_USER}/"
-                        scp -o StrictHostKeyChecking=no -o BatchMode=yes -r "${APP_DIR}" ${SSH_USER}@${TARGET_IP}:/home/${SSH_USER}/
+                        rsync -avz -e "ssh -o StrictHostKeyChecking=no -o BatchMode=yes" "${APP_DIR}" ${SSH_USER}@${TARGET_IP}:/home/${SSH_USER}/
                         
-                        echo "📋 Transferring audit script..."
+                        echo "📋 Transferring audit script via rsync..."
                         echo "Source: ${AUDIT_SCRIPT}"
-                        scp -o StrictHostKeyChecking=no -o BatchMode=yes "${AUDIT_SCRIPT}" ${SSH_USER}@${TARGET_IP}:/home/${SSH_USER}/
+                        rsync -avz -e "ssh -o StrictHostKeyChecking=no -o BatchMode=yes" "${AUDIT_SCRIPT}" ${SSH_USER}@${TARGET_IP}:/home/${SSH_USER}/
                         
                         echo "✅ Verifying files transferred to EC2..."
                         ssh -o StrictHostKeyChecking=no -o BatchMode=yes ${SSH_USER}@${TARGET_IP} "ls -la /home/${SSH_USER}/"
@@ -240,11 +230,12 @@ AUDIT_EOF
 
     post {
         always {
-            echo 'Cleaning up workspace...'
-            cleanWs()
+            echo 'Pipeline execution finished.'
         }
 
         success {
+            echo 'Cleaning up workspace after successful build...'
+            cleanWs()
             echo """
 ===========================================
 ✅ SUCCESS! Deployment Complete
