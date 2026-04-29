@@ -17,10 +17,9 @@ variable "instance_type" {
 }
 
 variable "allowed_ssh_ip" {
-  description = "The CIDR block allowed to SSH into the instance (use your-ip/32 for security)"
+  description = "Override the dynamic SSH lockdown with a specific CIDR (optional)"
   type        = string
-  # Removed 0.0.0.0/0 default for security. 
-  # Will be overridden by dynamic data source in main.tf or a tfvars file.
+  default     = "" 
 }
 
 variable "app_port" {
