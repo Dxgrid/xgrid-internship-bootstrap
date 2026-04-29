@@ -14,7 +14,7 @@ credentials:
   system:
     domainCredentials:
       - credentials:
-          - amazonWebServicesCredentials:
+          - aws:
               scope: GLOBAL
               id: "aws-credentials"
               description: "AWS Credentials for Terraform and EC2"
