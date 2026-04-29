@@ -87,49 +87,25 @@ pipeline {
         }
 
         // Stage 4.5: Ensure Docker is Installed
-        stage('Install Docker') {
+        // Stage 4.5: Wait for user_data background setup to finish
+        stage('Wait for System Ready') {
             steps {
                 sshagent(credentials: ['ec2-ssh-key']) {
                     sh """
-                        echo "🔍 Checking if Docker is installed..."
-                        if ssh -o StrictHostKeyChecking=no -o BatchMode=yes ${SSH_USER}@${TARGET_IP} "docker --version" 2>/dev/null; then
-                            echo "✅ Docker already installed"
-                        else
-                            echo "⚙️ Waiting for user_data script to complete (apt lock release)..."
-                            ssh -o StrictHostKeyChecking=no -o BatchMode=yes ${SSH_USER}@${TARGET_IP} << WAIT_APT
-# Wait for apt lock to be released (user_data script may still be running)
-for i in {1..60}; do
-  if ! sudo lsof /var/lib/apt/lists/lock 2>/dev/null | grep -q apt; then
-    echo "✅ apt lock released - user_data complete"
-    break
-  fi
-  echo "⏳ Waiting for apt lock... (\$i/60)"
-  sleep 5
-done
-
-echo "⚙️ Installing Docker on EC2..."
-set -e
-echo "Updating package manager..."
-sudo apt-get update -qq
-
-echo "Installing Docker and dependencies..."
-sudo apt-get install -y -qq docker.io docker-compose curl wget
-
-echo "Adding ubuntu user to docker group..."
-sudo usermod -aG docker ubuntu
-
-echo "Starting Docker service..."
-sudo systemctl start docker
-sudo systemctl enable docker
-
-echo "Waiting for Docker daemon..."
-sleep 5
-
-echo "Verifying Docker installation..."
-docker --version
-WAIT_APT
-                            echo "✅ Docker installed successfully"
-                        fi
+                        echo "⌛ Waiting for EC2 background setup (user_data) to release the apt lock..."
+                        ssh -o StrictHostKeyChecking=no -o BatchMode=yes ${SSH_USER}@${TARGET_IP} '
+                            # Loop for up to 10 minutes checking for the apt lock
+                            for i in {1..60}; do
+                                if ! sudo fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1; then
+                                    echo "✅ Background setup finished! EC2 is ready."
+                                    exit 0
+                                fi
+                                echo "⏳ Background setup still running... (\$i/60)"
+                                sleep 10
+                            done
+                            echo "❌ ERROR: System setup timed out!"
+                            exit 1
+                        '
                     """
                 }
             }
