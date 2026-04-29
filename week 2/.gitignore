@@ -1,6 +1,23 @@
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+crash.log
+*.tfplan
+*.tfvars
+*.tfvars.json
+override.tf
+override.tf.json
+
+# Jenkins Local Data
 jenkins_home/
+*.log
+
+# Docker / Environment
 .env
-*.pem
-terraform/.terraform/
-terraform/terraform.tfstate
-terraform/terraform.tfstate.backup
+.env.local
+.env.*.local
+
+# OS Files
+.DS_Store
+Thumbs.db
