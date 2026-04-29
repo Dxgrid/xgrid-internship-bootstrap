@@ -23,6 +23,7 @@ data "aws_ami" "ubuntu" {
 resource "aws_security_group" "app_sg" {
   name        = "${var.project_name}-sg"
   description = "Allow SSH and App Port"
+  vpc_id      = aws_vpc.main.id
 
   # SSH Access - Restricted to dynamic IP
   ingress {
@@ -60,6 +61,7 @@ resource "aws_instance" "app_server" {
   ami                    = data.aws_ami.ubuntu.id
   instance_type          = var.instance_type
   vpc_security_group_ids = [aws_security_group.app_sg.id]
+  subnet_id              = aws_subnet.public.id
   key_name               = var.key_pair_name
 
   # User data script runs at instance launch to install Docker and dependencies
