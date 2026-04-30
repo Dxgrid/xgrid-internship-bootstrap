@@ -3,6 +3,11 @@
 
 pipeline {
     agent any
+    
+    triggers {
+        githubPush()
+    }
+
 
     environment {
         TF_DIR         = 'week 2/terraform'

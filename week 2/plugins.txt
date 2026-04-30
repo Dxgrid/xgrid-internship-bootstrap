@@ -10,6 +10,7 @@ docker-plugin
 # Git & GitHub
 git
 github
+github-api
 github-branch-source
 
 # Credentials & SSH
