@@ -15,7 +15,7 @@ pipeline {
         SCRIPTS_DIR     = 'week 2/scripts'
         
         // Docker Hub Config
-        DOCKER_HUB_USER = 'Dxgrid'
+        DOCKER_HUB_USER = 'dxgrid'
         IMAGE_NAME      = 'health-api'
         DOCKER_REPO     = "${DOCKER_HUB_USER}/${IMAGE_NAME}"
         APP_PORT        = '8000'
