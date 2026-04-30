@@ -8,30 +8,26 @@ pipeline {
         githubPush()
     }
 
-
     environment {
-        TF_DIR         = 'week 2/terraform'
-        APP_DIR        = 'week 2/app'
-        AUDIT_SCRIPT   = 'week 2/scripts/system_audit.sh'
-        SSH_USER       = 'ubuntu'
-        CONTAINER_NAME = 'health-api'
-        APP_PORT       = '8000'
-    }
-
-    options {
-        timestamps()
-        timeout(time: 30, unit: 'MINUTES')
-        buildDiscarder(logRotator(numToKeepStr: '10'))
+        // Global Config
+        TF_DIR          = 'week 2/terraform'
+        SCRIPTS_DIR     = 'week 2/scripts'
+        
+        // Docker Hub Config
+        DOCKER_HUB_USER = 'Dxgrid'
+        IMAGE_NAME      = 'health-api'
+        DOCKER_REPO     = "${DOCKER_HUB_USER}/${IMAGE_NAME}"
+        APP_PORT        = '8000'
+        
+        // Infrastructure State (from Terraform outputs)
+        TARGET_IP       = ""
     }
 
     stages {
-
-        // Stage 1: Terraform Validation
         stage('Terraform Validate') {
             steps {
-                dir("${TF_DIR}") {
+                dir("${env.TF_DIR}") {
                     withAWS(credentials: 'aws-credentials', region: 'us-east-1') {
-                        sh 'terraform version'
                         sh 'terraform init -input=false'
                         sh 'terraform fmt -recursive .'
                         sh 'terraform validate'
@@ -41,10 +37,9 @@ pipeline {
             }
         }
 
-        // Stage 2: Terraform Plan
         stage('Terraform Plan') {
             steps {
-                dir("${TF_DIR}") {
+                dir("${env.TF_DIR}") {
                     withAWS(credentials: 'aws-credentials', region: 'us-east-1') {
                         sh 'terraform init -input=false'
                         sh 'terraform plan -input=false -out=tfplan'
@@ -54,14 +49,13 @@ pipeline {
             }
         }
 
-        // Stage 3: Terraform Apply (uses plan from previous stage)
         stage('Terraform Provision') {
             steps {
-                dir("${TF_DIR}") {
+                dir("${env.TF_DIR}") {
                     withAWS(credentials: 'aws-credentials', region: 'us-east-1') {
                         sh 'terraform apply -input=false tfplan'
                         script {
-                            env.TARGET_IP = sh(script: 'terraform output -raw public_ip', returnStdout: true).trim()
+                            env.TARGET_IP = sh(script: "terraform output -raw public_ip", returnStdout: true).trim()
                         }
                     }
                 }
@@ -69,141 +63,110 @@ pipeline {
             }
         }
 
-        // Stage 4: Wait for SSH to be Ready
         stage('Wait for SSH Ready') {
             steps {
                 script {
                     echo "Waiting for SSH on ${env.TARGET_IP}:22..."
                     timeout(time: 5, unit: 'MINUTES') {
                         waitUntil(initialRecurrencePeriod: 10000) {
-                            def ready = sh(script: """bash -c "exec 3<>/dev/tcp/${env.TARGET_IP}/22" 2>/dev/null && exit 0 || exit 1""", returnStatus: true)
+                            def ready = sh(script: "bash -c \"exec 3<>/dev/tcp/${env.TARGET_IP}/22\" 2>/dev/null && exit 0 || exit 1", returnStatus: true)
                             if (ready == 0) {
                                 echo 'SSH is ready!'
                                 return true
                             }
-                            echo 'Waiting for SSH...'
                             return false
                         }
                     }
-                    sleep(time: 10, unit: 'SECONDS')
+                    sleep 10
                     echo 'EC2 is ready for deployment'
                 }
             }
         }
 
-        // Stage 4.5: Ensure Docker is Installed
-        // Stage 4.5: Wait for user_data background setup to finish
-        stage('Wait for System Ready') {
-            steps {
-                sshagent(credentials: ['ec2-ssh-key']) {
-                    sh """
-                        echo "⌛ Waiting for EC2 background setup (user_data) to release the apt lock..."
-                        ssh -o StrictHostKeyChecking=no -o BatchMode=yes ${SSH_USER}@${TARGET_IP} '
-                            # Loop for up to 10 minutes checking for the apt lock
-                            for i in {1..60}; do
-                                if ! sudo fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1; then
-                                    echo "✅ Background setup finished! EC2 is ready."
-                                    exit 0
-                                fi
-                                echo "⏳ Background setup still running... (\$i/60)"
-                                sleep 10
-                            done
-                            echo "❌ ERROR: System setup timed out!"
-                            exit 1
-                        '
-                    """
-                }
-            }
-        }
-
-        // Stage 5: Transfer Files to EC2
-        stage('Transfer Files') {
-            steps {
-                sshagent(credentials: ['ec2-ssh-key']) {
-                    sh """
-                        echo "📁 Transferring application files via rsync..."
-                        echo "Source: ${APP_DIR}"
-                        rsync -avz -e "ssh -o StrictHostKeyChecking=no -o BatchMode=yes" "${APP_DIR}" ${SSH_USER}@${TARGET_IP}:/home/${SSH_USER}/
-                        
-                        echo "📋 Transferring audit script via rsync..."
-                        echo "Source: ${AUDIT_SCRIPT}"
-                        rsync -avz -e "ssh -o StrictHostKeyChecking=no -o BatchMode=yes" "${AUDIT_SCRIPT}" ${SSH_USER}@${TARGET_IP}:/home/${SSH_USER}/
-                        
-                        echo "✅ Verifying files transferred to EC2..."
-                        ssh -o StrictHostKeyChecking=no -o BatchMode=yes ${SSH_USER}@${TARGET_IP} "ls -la /home/${SSH_USER}/"
-                    """
-                }
-                echo '✅ Files transferred successfully'
-            }
-        }
-
-        // Stage 6: Build and Deploy Docker Container
-        stage('Build and Deploy Container') {
-            steps {
-                sshagent(credentials: ['ec2-ssh-key']) {
-                    sh """
-                        ssh -o StrictHostKeyChecking=no -o BatchMode=yes ${SSH_USER}@${TARGET_IP} << EOF
-                        set -e
-                        
-                        echo "🚀 ======================================="
-                        echo "Build and Deploy Stage"
-                        echo "======================================="
-                        echo "Container: ${CONTAINER_NAME}"
-                        echo "App Port: ${APP_PORT}"
-                        echo "SSH User: ${SSH_USER}"
-                        echo ""
-                        
-                        echo "📁 Checking if app directory exists..."
-                        ls -la /home/${SSH_USER}/app || echo "⚠️ App directory not found!"
-                        
-                        echo ""
-                        echo "Stopping old container if it exists..."
-                        docker stop ${CONTAINER_NAME} || true
-                        docker rm ${CONTAINER_NAME} || true
-                        
-                        echo ""
-                        echo "🐳 Building Docker image..."
-                        cd /home/${SSH_USER}/app
-                        docker build -t ${CONTAINER_NAME}:latest .
-                        
-                        echo ""
-                        echo "🚀 Starting new container..."
-                        docker run -d --name ${CONTAINER_NAME} --restart unless-stopped -p ${APP_PORT}:${APP_PORT} ${CONTAINER_NAME}:latest
-                        
-                        echo ""
-                        echo "✅ Container is running:"
-                        docker ps | grep ${CONTAINER_NAME}
-                        
-                        echo ""
-                        echo "🌐 Testing health endpoint..."
-                        curl -s http://localhost:${APP_PORT}/health | head -20 || echo "⚠️ Health endpoint not yet responding"
-EOF
-                    """
-                }
-            }
-        }
-
-        // Stage 7: Run System Audit
-        stage('Run System Audit') {
+        stage('Build and Push Image') {
             steps {
                 script {
-                    sshagent(credentials: ['ec2-ssh-key']) {
-                        def auditStatus = sh(script: """
-                            echo "📊 Running system audit on ${TARGET_IP}..."
-                            ssh -o StrictHostKeyChecking=no -o BatchMode=yes ${SSH_USER}@${TARGET_IP} << AUDIT_EOF
-                            echo "======================================="
-                            echo "System Audit Report"
-                            echo "======================================="
-                            chmod +x /home/${SSH_USER}/system_audit.sh
-                            bash /home/${SSH_USER}/system_audit.sh
-AUDIT_EOF
-                        """, returnStatus: true)
+                    echo "🐳 Building and Pushing Image: ${env.DOCKER_REPO}:${BUILD_NUMBER}"
+                    docker.withRegistry('https://index.docker.io/v1/', 'docker-hub-creds') {
+                        // Build from the app directory
+                        def customImage = docker.build("${env.DOCKER_REPO}:${BUILD_NUMBER}", "./week\\ 2/app")
                         
-                        if (auditStatus != 0) {
-                            error("❌ System audit failed with exit code ${auditStatus}")
-                        }
-                        echo '✅ Audit passed successfully!'
+                        // Push specific version and 'latest'
+                        customImage.push()
+                        customImage.push('latest')
                     }
+                    echo "✅ Image pushed successfully to Docker Hub"
+                }
+            }
+        }
+
+        stage('Remote Deploy') {
+            steps {
+                // Use both SSH and Docker credentials
+                sshagent(['ec2-ssh-key']) {
+                    withCredentials([usernamePassword(credentialsId: 'docker-hub-creds', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
+                        sh """
+                            ssh -o StrictHostKeyChecking=no ubuntu@${env.TARGET_IP} << 'EOF'
+                                # Login to Docker Hub
+                                echo "${DOCKER_PASS}" | docker login -u "${DOCKER_USER}" --password-stdin
+                                
+                                # Clean up existing containers
+                                docker stop ${env.IMAGE_NAME} || true
+                                docker rm ${env.IMAGE_NAME} || true
+                                
+                                # Pull the fresh image
+                                echo "📥 Pulling image version: ${BUILD_NUMBER}"
+                                docker pull ${env.DOCKER_REPO}:${BUILD_NUMBER}
+                                
+                                # Run the container
+                                echo "🚀 Starting container..."
+                                docker run -d \
+                                    --name ${env.IMAGE_NAME} \
+                                    --restart unless-stopped \
+                                    -p ${env.APP_PORT}:${env.APP_PORT} \
+                                    ${env.DOCKER_REPO}:${BUILD_NUMBER}
+                                
+                                # Security cleanup
+                                docker logout
+                            EOF
+                        """
+                    }
+                }
+            }
+        }
+
+        stage('Run System Audit') {
+            steps {
+                sshagent(['ec2-ssh-key']) {
+                    sh """
+                        echo "📊 Executing system audit on EC2 host..."
+                        ssh -o StrictHostKeyChecking=no ubuntu@${env.TARGET_IP} << 'EOF'
+                            STATUS=0
+                            
+                            # 1. Check Disk
+                            USAGE=\$(df / | awk 'NR==2 {print \$5}' | tr -d '%')
+                            if [ "\$USAGE" -gt 90 ]; then echo "❌ Disk Full (\$USAGE%)"; STATUS=1; fi
+                            
+                            # 2. Check if container is running
+                            if ! docker ps --format "{{.Names}}" | grep -q "${env.IMAGE_NAME}"; then
+                                echo "❌ Container ${env.IMAGE_NAME} NOT running"; STATUS=1
+                            fi
+                            
+                            # 3. Check Health Endpoint
+                            CODE=\$(curl -s -o /dev/null -w "%{http_code}" http://localhost:${env.APP_PORT}/health)
+                            if [ "\$CODE" != "200" ]; then
+                                echo "❌ Health Check Failed (HTTP \$CODE)"; STATUS=1
+                            fi
+                            
+                            if [ \$STATUS -eq 0 ]; then
+                                echo "✅ --- AUDIT PASSED ---"
+                                exit 0
+                            else
+                                echo "❌ --- AUDIT FAILED ---"
+                                exit 1
+                            fi
+EOF
+                    """
                 }
             }
         }
@@ -211,32 +174,28 @@ AUDIT_EOF
 
     post {
         always {
-            echo 'Pipeline execution finished.'
-        }
-
-        success {
-            echo 'Cleaning up workspace after successful build...'
+            echo "Pipeline execution finished."
             cleanWs()
+        }
+        success {
             echo """
-===========================================
-✅ SUCCESS! Deployment Complete
-===========================================
-
-🌐 Health API Endpoint:
-   http://${env.TARGET_IP}:8000/health
-
-📊 System Status:
-   - EC2 Instance: Running
-   - Docker Container: Deployed
-   - Health Check: Passing
-   - Audit Results: ✓ OK
-
-Next Steps:
-- Monitor the health endpoint
-- Check CloudWatch logs if needed
+            ===========================================
+            ✅ SUCCESS! Docker-Hub Deployment Complete
+            ===========================================
+            
+            🌐 Health API Endpoint:
+               http://${env.TARGET_IP}:${env.APP_PORT}/health
+            
+            📦 Image Version:
+               ${env.DOCKER_REPO}:${BUILD_NUMBER}
+            
+            📊 Status:
+               - Source Code: Kept on Jenkins (Secured)
+               - Build Engine: Jenkins Node
+               - Production: Docker Pull Only (Clean)
+            ===========================================
             """
         }
-
         failure {
             echo '''
 FAILED! Check the logs above for errors.
