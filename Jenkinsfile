@@ -55,11 +55,15 @@ pipeline {
                     withAWS(credentials: 'aws-credentials', region: 'us-east-1') {
                         sh 'terraform apply -input=false tfplan'
                         script {
-                            env.TARGET_IP = sh(script: "terraform output -raw public_ip", returnStdout: true).trim()
+                            // Assign directly to the global env object
+                            def ip = sh(script: "terraform output -raw public_ip", returnStdout: true).trim()
+                            env.TARGET_IP = ip
                         }
                     }
                 }
-                echo "🎯 EC2 Provisioned. IP: ${env.TARGET_IP}"
+                script {
+                    echo "🎯 EC2 Provisioned. IP: ${env.TARGET_IP}"
+                }
             }
         }
 
