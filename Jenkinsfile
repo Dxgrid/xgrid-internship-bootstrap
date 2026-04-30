@@ -1,6 +1,8 @@
 // Jenkinsfile - Week 2 End-to-End Pipeline
 // Terraform → Docker → Deploy → Audit
 
+def TARGET_IP = ""
+
 pipeline {
     agent any
     
@@ -19,8 +21,7 @@ pipeline {
         DOCKER_REPO     = "${DOCKER_HUB_USER}/${IMAGE_NAME}"
         APP_PORT        = '8000'
         
-        // Infrastructure State (from Terraform outputs)
-        TARGET_IP       = ""
+        // Removed TARGET_IP from here
     }
 
     stages {
@@ -55,25 +56,22 @@ pipeline {
                     withAWS(credentials: 'aws-credentials', region: 'us-east-1') {
                         sh 'terraform apply -input=false tfplan'
                         script {
-                            // Assign directly to the global env object
-                            def ip = sh(script: "terraform output -raw public_ip", returnStdout: true).trim()
-                            env.TARGET_IP = ip
+                            // Assign to the global Groovy variable
+                            TARGET_IP = sh(script: "terraform output -raw public_ip", returnStdout: true).trim()
                         }
                     }
                 }
-                script {
-                    echo "🎯 EC2 Provisioned. IP: ${env.TARGET_IP}"
-                }
+                echo "🎯 EC2 Provisioned. IP: ${TARGET_IP}"
             }
         }
 
         stage('Wait for SSH Ready') {
             steps {
                 script {
-                    echo "Waiting for SSH on ${env.TARGET_IP}:22..."
+                    echo "Waiting for SSH on ${TARGET_IP}:22..."
                     timeout(time: 5, unit: 'MINUTES') {
                         waitUntil(initialRecurrencePeriod: 10000) {
-                            def ready = sh(script: "bash -c \"exec 3<>/dev/tcp/${env.TARGET_IP}/22\" 2>/dev/null && exit 0 || exit 1", returnStatus: true)
+                            def ready = sh(script: "bash -c \"exec 3<>/dev/tcp/${TARGET_IP}/22\" 2>/dev/null && exit 0 || exit 1", returnStatus: true)
                             if (ready == 0) {
                                 echo 'SSH is ready!'
                                 return true
@@ -110,7 +108,7 @@ pipeline {
                 sshagent(['ec2-ssh-key']) {
                     withCredentials([usernamePassword(credentialsId: 'docker-hub-creds', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
                         sh """
-                            ssh -o StrictHostKeyChecking=no ubuntu@${env.TARGET_IP} << 'EOF'
+                            ssh -o StrictHostKeyChecking=no ubuntu@${TARGET_IP} << 'EOF'
                                 # Login to Docker Hub
                                 echo "${DOCKER_PASS}" | docker login -u "${DOCKER_USER}" --password-stdin
                                 
@@ -144,7 +142,7 @@ pipeline {
                 sshagent(['ec2-ssh-key']) {
                     sh """
                         echo "📊 Executing system audit on EC2 host..."
-                        ssh -o StrictHostKeyChecking=no ubuntu@${env.TARGET_IP} << 'EOF'
+                        ssh -o StrictHostKeyChecking=no ubuntu@${TARGET_IP} << 'EOF'
                             STATUS=0
                             
                             # 1. Check Disk
@@ -188,7 +186,7 @@ EOF
             ===========================================
             
             🌐 Health API Endpoint:
-               http://${env.TARGET_IP}:${env.APP_PORT}/health
+               http://${TARGET_IP}:${env.APP_PORT}/health
             
             📦 Image Version:
                ${env.DOCKER_REPO}:${BUILD_NUMBER}
