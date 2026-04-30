@@ -129,7 +129,7 @@ pipeline {
                                 
                                 # Security cleanup
                                 docker logout
-                            EOF
+EOF
                         """
                     }
                 }
