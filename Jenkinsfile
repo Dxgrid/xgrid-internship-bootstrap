@@ -1,5 +1,4 @@
 // Jenkinsfile - Week 2 End-to-End Pipeline
-// Terraform → Docker → Deploy → Audit
 
 def TARGET_IP = ""
 
