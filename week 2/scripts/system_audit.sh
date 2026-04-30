@@ -1,5 +1,4 @@
 #!/bin/bash
-# Minimal System Audit Script
 
 STATUS=0
 
