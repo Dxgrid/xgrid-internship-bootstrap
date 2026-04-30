@@ -1,0 +1,33 @@
+# Jenkins Plugins - Required for CI/CD pipeline
+# Pipeline / Declarative Pipeline
+workflow-aggregator
+pipeline-model-definition
+
+# Docker integration (correct names!)
+docker-workflow
+docker-plugin
+
+# Git & GitHub
+git
+github
+github-api
+github-branch-source
+
+# Credentials & SSH
+credentials
+credentials-binding
+plain-credentials
+ssh-credentials
+ssh-agent
+aws-credentials
+pipeline-aws
+
+# Jenkins Configuration as Code (JCasC) - fixes the credentials persistence issue
+configuration-as-code
+configuration-as-code-groovy
+
+# General recommended
+antisamy-markup-formatter
+build-timeout
+timestamper
+ws-cleanup

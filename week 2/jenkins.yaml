@@ -1,0 +1,30 @@
+jenkins:
+  securityRealm:
+    local:
+      allowsSignup: false
+  authorizationStrategy:
+    loggedInUsersCanDoAnything:
+      allowAnonymousRead: false
+
+unclassified:
+  location:
+    url: "http://localhost:8080/"
+
+credentials:
+  system:
+    domainCredentials:
+      - credentials:
+          - aws:
+              scope: GLOBAL
+              id: "aws-credentials"
+              description: "AWS Credentials for Terraform and EC2"
+              accessKey: "${AWS_ACCESS_KEY_ID}"
+              secretKey: "${AWS_SECRET_ACCESS_KEY}"
+          - basicSSHUserPrivateKey:
+              scope: GLOBAL
+              id: "ec2-ssh-key"
+              description: "EC2 SSH Private Key for Ubuntu instances"
+              username: "ubuntu"
+              privateKeySource:
+                directEntry:
+                  privateKey: "${EC2_SSH_PRIVATE_KEY}"
