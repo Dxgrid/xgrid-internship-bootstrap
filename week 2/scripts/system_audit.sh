@@ -1,118 +1,51 @@
 #!/bin/bash
+# Minimal System Audit Script
 
-# ============================================
-# System Audit Script - Issue #4
-# Purpose: Check if EC2 deployment is healthy
-# Version: 1.0.0
-# ============================================
+STATUS=0
 
-# Colors for output
-RED='\033[0;31m'        # Red for errors
-GREEN='\033[0;32m'      # Green for success
-YELLOW='\033[0;33m'     # Yellow for warnings
-BLUE='\033[0;34m'       # Blue for info
-NC='\033[0m'            # No color
+echo "--- STARTING SYSTEM AUDIT ---"
 
-# Status variables
-FAILED=0                # 0 = all good, 1 = something failed
-
-echo "========================================"
-echo "  System Audit Script"
-echo "========================================"
-echo ""
-
-# ============================================
-# CHECK 1: Disk Usage
-# ============================================
-echo -e "${BLUE}[1] Checking Disk Usage...${NC}"
-
-# Get disk usage percentage from root filesystem
-DISK_USAGE=$(df / | awk 'NR==2 {print $5}' | sed 's/%//')
-
-echo "Disk usage: ${DISK_USAGE}%"
-
-if [ "$DISK_USAGE" -gt 80 ]; then
-    echo -e "${YELLOW}⚠ WARNING: Disk usage is high${NC}"
+# 1. Disk Check (Threshold 90%)
+USAGE=$(df / | awk 'NR==2 {print $5}' | tr -d '%')
+if [ "$USAGE" -gt 90 ]; then
+    echo "DISK ALERT: Usage is at ${USAGE}%"
+    STATUS=1
 else
-    echo -e "${GREEN}✓ Disk usage is OK${NC}"
+    echo "Disk OK: ${USAGE}% used"
 fi
 
-echo ""
+# 2. Port Checks (22 and 8000)
+for port in 22 8000; do
+    if netstat -tuln | grep -q ":$port "; then
+        echo "Port $port: OPEN"
+    else
+        echo "Port $port: CLOSED"
+        STATUS=1
+    fi
+done
 
-# ============================================
-# CHECK 2: Required Ports (22 and 8000)
-# ============================================
-echo -e "${BLUE}[2] Checking Ports...${NC}"
-
-# Check if port 22 is open (SSH) - use ss instead of netstat
-if ss -tuln 2>/dev/null | grep ":22 " > /dev/null || netstat -tuln 2>/dev/null | grep ":22 " > /dev/null; then
-    echo -e "${GREEN}✓ Port 22 (SSH) is open${NC}"
+# 3. Docker Container Check
+if docker ps --format '{{.Names}}' | grep -q "health-api"; then
+    echo "Container health-api: RUNNING"
 else
-    echo -e "${RED}✗ Port 22 (SSH) is NOT open${NC}"
-    FAILED=1
+    echo "Container health-api: NOT FOUND"
+    STATUS=1
 fi
 
-# Check if port 8000 is open (API) - use ss instead of netstat
-if ss -tuln 2>/dev/null | grep ":8000 " > /dev/null || netstat -tuln 2>/dev/null | grep ":8000 " > /dev/null; then
-    echo -e "${GREEN}✓ Port 8000 (API) is open${NC}"
+# 4. API Health Endpoint Check
+CODE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8000/health)
+if [ "$CODE" == "200" ]; then
+    echo "API Endpoint: SUCCESS (HTTP 200)"
 else
-    echo -e "${RED}✗ Port 8000 (API) is NOT open${NC}"
-    FAILED=1
+    echo "API Endpoint: FAILED (HTTP $CODE)"
+    STATUS=1
 fi
 
-echo ""
-
-# ============================================
-# CHECK 3: Container Status
-# ============================================
-echo -e "${BLUE}[3] Checking Container Status...${NC}"
-
-# Check if container "health-api" is running
-if docker ps --format "table {{.Names}}" | grep "^health-api$" > /dev/null; then
-    echo -e "${GREEN}✓ Container 'health-api' is running${NC}"
-else
-    echo -e "${RED}✗ Container 'health-api' is NOT running${NC}"
-    FAILED=1
-fi
-
-echo ""
-
-# ============================================
-# CHECK 4: Health Endpoint
-# ============================================
-echo -e "${BLUE}[4] Checking Health Endpoint...${NC}"
-
-# Test the /health endpoint
-RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8000/health 2>/dev/null)
-
-if [ "$RESPONSE" == "200" ]; then
-    echo -e "${GREEN}✓ Health endpoint is responding (HTTP ${RESPONSE})${NC}"
-    
-    # Show the actual response
-    API_RESPONSE=$(curl -s http://localhost:8000/health 2>/dev/null)
-    echo "  Response: ${API_RESPONSE}"
-else
-    echo -e "${RED}✗ Health endpoint is NOT responding (HTTP ${RESPONSE})${NC}"
-    FAILED=1
-fi
-
-echo ""
-
-# ============================================
-# FINAL SUMMARY
-# ============================================
-echo "========================================"
-echo "  AUDIT SUMMARY"
-echo "========================================"
-
-if [ $FAILED -eq 0 ]; then
-    echo -e "${GREEN}✓ SYSTEM IS HEALTHY${NC}"
-    echo "  - All critical checks passed"
-    echo "  - Ready for deployment"
+# FINAL RESULT
+if [ $STATUS -eq 0 ]; then
+    echo "--- AUDIT PASSED ---"
     exit 0
 else
-    echo -e "${RED}✗ SYSTEM HAS ISSUES${NC}"
-    echo "  - Some critical checks failed"
-    echo "  - Fix problems and try again"
+    echo "--- AUDIT FAILED ---"
     exit 1
 fi
