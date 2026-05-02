@@ -29,8 +29,8 @@ credentials:
                 fileOnMaster:
                   privateKeyFile: "${EC2_SSH_PRIVATE_KEY}"
           - usernamePassword:
-            scope: GLOBAL
-            id: "docker-hub-creds"
-            description: "Docker Hub credentials for build and deploy"
-            username: "${DOCKER_HUB_USERNAME}"
-            password: "${DOCKER_HUB_TOKEN}"
+              scope: GLOBAL
+              id: "docker-hub-creds"
+              description: "Docker Hub credentials for build and deploy"
+              username: "${DOCKER_HUB_USERNAME}"
+              password: "${DOCKER_HUB_TOKEN}"
