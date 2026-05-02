@@ -122,3 +122,5 @@ If you'd like, I can commit this file to the repository (already created) and th
 - Produce a per-file annotated diff highlighting important lines to review next.
 
 Tell me which follow-up you'd like.
+
+Test push note: this line exists only to verify that a small commit triggers the GitHub webhook path.
