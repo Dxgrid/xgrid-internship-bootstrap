@@ -23,6 +23,9 @@ services:
       - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
       # EC2 SSH Key - passed from host environment
       - EC2_SSH_PRIVATE_KEY=${EC2_SSH_PRIVATE_KEY}
+      # Docker Hub Credentials - passed from host environment
+      - DOCKER_HUB_USERNAME=${DOCKER_HUB_USERNAME}
+      - DOCKER_HUB_TOKEN=${DOCKER_HUB_TOKEN}
     
     # Run as root to access Docker socket
     user: root
@@ -37,6 +40,9 @@ services:
       
       # 3. Docker socket passthrough (allows Jenkins to run Docker commands)
       - /var/run/docker.sock:/var/run/docker.sock
+
+      # 4. EC2 SSH key file available to JCasC as a file-backed credential
+      - ${EC2_SSH_PRIVATE_KEY}:${EC2_SSH_PRIVATE_KEY}:ro
     
     # Permissions fix
     privileged: true

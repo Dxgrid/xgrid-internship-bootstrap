@@ -53,8 +53,8 @@ if [ ! -f "$SSH_KEY_FILE" ]; then
   exit 1
 fi
 
-export EC2_SSH_PRIVATE_KEY="$(cat "$SSH_KEY_FILE")"
-echo "✅ EC2 SSH Private Key loaded"
+export EC2_SSH_PRIVATE_KEY="$SSH_KEY_FILE"
+echo "✅ EC2 SSH Private Key path saved"
 echo ""
 
 # Step 4: Rebuild and restart Jenkins with new plugins
@@ -103,6 +103,7 @@ echo "2. Go to Manage Jenkins → Credentials → System → Global credentials"
 echo "3. You should see 2 credentials:"
 echo "   - aws-credentials (AWS type - combines access key and secret key)"
 echo "   - ec2-ssh-key (SSH key type)"
+echo "   - docker-hub-creds (Docker Hub username/password)"
 echo ""
 echo "4. These credentials are now provisioned by JCasC and will be available to pipelines"
 echo ""
