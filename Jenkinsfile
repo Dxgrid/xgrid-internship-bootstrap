@@ -106,31 +106,38 @@ pipeline {
                 // Use both SSH and Docker credentials
                 sshagent(['ec2-ssh-key']) {
                     withCredentials([usernamePassword(credentialsId: 'docker-hub-creds', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
-                        sh """
-                            ssh -o StrictHostKeyChecking=no ubuntu@${TARGET_IP} << 'EOF'
-                                # Login to Docker Hub
-                                echo "${DOCKER_PASS}" | docker login -u "${DOCKER_USER}" --password-stdin
-                                
-                                # Clean up existing containers
-                                docker stop ${env.IMAGE_NAME} || true
-                                docker rm ${env.IMAGE_NAME} || true
-                                
-                                # Pull the fresh image
-                                echo "📥 Pulling image version: ${BUILD_NUMBER}"
-                                docker pull ${env.DOCKER_REPO}:${BUILD_NUMBER}
-                                
-                                # Run the container
-                                echo "🚀 Starting container..."
-                                docker run -d \
-                                    --name ${env.IMAGE_NAME} \
-                                    --restart unless-stopped \
-                                    -p ${env.APP_PORT}:${env.APP_PORT} \
-                                    ${env.DOCKER_REPO}:${BUILD_NUMBER}
-                                
-                                # Security cleanup
-                                docker logout
+                        withEnv([
+                            "TARGET_IP=${TARGET_IP}",
+                            "IMAGE_NAME=${env.IMAGE_NAME}",
+                            "DOCKER_REPO=${env.DOCKER_REPO}",
+                            "APP_PORT=${env.APP_PORT}"
+                        ]) {
+                            sh '''
+                                ssh -o StrictHostKeyChecking=no ubuntu@$TARGET_IP << EOF
+                                    # Login to Docker Hub
+                                    echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin
+
+                                    # Clean up existing containers
+                                    docker stop $IMAGE_NAME || true
+                                    docker rm $IMAGE_NAME || true
+
+                                    # Pull the fresh image
+                                    echo "📥 Pulling image version: $BUILD_NUMBER"
+                                    docker pull $DOCKER_REPO:$BUILD_NUMBER
+
+                                    # Run the container
+                                    echo "🚀 Starting container..."
+                                    docker run -d \
+                                        --name $IMAGE_NAME \
+                                        --restart unless-stopped \
+                                        -p $APP_PORT:$APP_PORT \
+                                        $DOCKER_REPO:$BUILD_NUMBER
+
+                                    # Security cleanup
+                                    docker logout
 EOF
-                        """
+                            '''
+                        }
                     }
                 }
             }
