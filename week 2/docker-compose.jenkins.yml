@@ -41,8 +41,7 @@ services:
       # 3. Docker socket passthrough (allows Jenkins to run Docker commands)
       - /var/run/docker.sock:/var/run/docker.sock
 
-      # 4. EC2 SSH key file available to JCasC as a file-backed credential
-      - ${EC2_SSH_PRIVATE_KEY}:${EC2_SSH_PRIVATE_KEY}:ro
+
     
     # Permissions fix
     privileged: true

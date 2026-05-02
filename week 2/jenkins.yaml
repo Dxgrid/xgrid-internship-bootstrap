@@ -26,8 +26,8 @@ credentials:
               description: "EC2 SSH Private Key for Ubuntu instances"
               username: "ubuntu"
               privateKeySource:
-                fileOnMaster:
-                  privateKeyFile: "${EC2_SSH_PRIVATE_KEY}"
+                directEntry:
+                  privateKey: "${EC2_SSH_PRIVATE_KEY}"
           - usernamePassword:
               scope: GLOBAL
               id: "docker-hub-creds"
