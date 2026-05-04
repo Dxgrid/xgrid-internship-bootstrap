@@ -17,9 +17,9 @@ variable "instance_type" {
 }
 
 variable "allowed_ssh_ip" {
-  description = "The CIDR block allowed to SSH into the instance (e.g., your public IP /32)"
+  description = "Override the dynamic SSH lockdown with a specific CIDR (optional)"
   type        = string
-  default     = "0.0.0.0/0" # PLACEHOLDER: Replace with your IP for security
+  default     = "" 
 }
 
 variable "app_port" {
