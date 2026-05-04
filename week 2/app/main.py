@@ -1,7 +1,5 @@
 """
 Secure Python Health API
-Purpose: Provide a minimal, production-ready health check endpoint
-Security: Runs as non-root user, minimal dependencies
 """
 
 from fastapi import FastAPI
