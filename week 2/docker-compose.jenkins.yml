@@ -1,0 +1,50 @@
+services:
+  jenkins:
+    # Use custom image that includes Docker CLI
+    build:
+      context: .
+      dockerfile: Dockerfile.jenkins
+    
+    container_name: jenkins-controller
+    
+    # Ports
+    ports:
+      - "8080:8080"    # Web UI
+      - "50000:50000"  # Agent communication port
+    
+    # Environment variables
+    environment:
+      - JENKINS_OPTS=--httpPort=8080
+      - JAVA_OPTS=-Xmx512m -Xms512m
+    
+    # Run as root to access Docker socket
+    user: root
+    
+    # Volumes - PERSISTENCE IS KEY
+    volumes:
+      # 1. Jenkins home directory (persists jobs, configs, plugins)
+      - jenkins_home:/var/jenkins_home
+      
+      # 2. Docker socket passthrough (allows Jenkins to run Docker commands)
+      - /var/run/docker.sock:/var/run/docker.sock
+    
+    # Permissions fix
+    privileged: true
+    
+    # Restart policy
+    restart: unless-stopped
+    
+    # Resource limits (optional, but good practice)
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 1G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+
+# Named volume for persistence
+volumes:
+  jenkins_home:
+    driver: local
