@@ -215,14 +215,6 @@ EOF
             🌐 Health API Endpoint:
                http://${TARGET_IP}:${env.APP_PORT}/health
             
-            📦 Image Version:
-               ${env.DOCKER_REPO}:${BUILD_NUMBER}
-            
-            📊 Status:
-               - Source Code: Kept on Jenkins (Secured)
-               - Build Engine: Jenkins Node
-               - Production: Docker Pull Only (Clean)
-            ===========================================
             """
         }
         failure {
