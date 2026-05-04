@@ -150,22 +150,43 @@ EOF
                         echo "📊 Executing system audit on EC2 host..."
                         ssh -o StrictHostKeyChecking=no ubuntu@${TARGET_IP} << 'EOF'
                             STATUS=0
-                            
+
                             # 1. Check Disk
                             USAGE=\$(df / | awk 'NR==2 {print \$5}' | tr -d '%')
-                            if [ "\$USAGE" -gt 90 ]; then echo "❌ Disk Full (\$USAGE%)"; STATUS=1; fi
-                            
-                            # 2. Check if container is running
-                            if ! docker ps --format "{{.Names}}" | grep -q "${env.IMAGE_NAME}"; then
-                                echo "❌ Container ${env.IMAGE_NAME} NOT running"; STATUS=1
+                            if [ "\$USAGE" -gt 90 ]; then
+                                echo "❌ Disk Full (\$USAGE%)"
+                                STATUS=1
+                            else
+                                echo "Disk OK: \$USAGE% used"
                             fi
-                            
-                            # 3. Check Health Endpoint
+
+                            # 2. Port Checks (22 and 8000)
+                            for port in 22 8000; do
+                                if netstat -tuln | grep -q ":\$port "; then
+                                    echo "Port \$port: OPEN"
+                                else
+                                    echo "Port \$port: CLOSED"
+                                    STATUS=1
+                                fi
+                            done
+
+                            # 3. Container Check
+                            if docker ps --format "{{.Names}}" | grep -q "${env.IMAGE_NAME}"; then
+                                echo "Container ${env.IMAGE_NAME}: RUNNING"
+                            else
+                                echo "Container ${env.IMAGE_NAME}: NOT FOUND"
+                                STATUS=1
+                            fi
+
+                            # 4. Health Endpoint Check
                             CODE=\$(curl -s -o /dev/null -w "%{http_code}" http://localhost:${env.APP_PORT}/health)
                             if [ "\$CODE" != "200" ]; then
-                                echo "❌ Health Check Failed (HTTP \$CODE)"; STATUS=1
+                                echo "❌ Health Check Failed (HTTP \$CODE)"
+                                STATUS=1
+                            else
+                                echo "API Endpoint: SUCCESS (HTTP \$CODE)"
                             fi
-                            
+
                             if [ \$STATUS -eq 0 ]; then
                                 echo "✅ --- AUDIT PASSED ---"
                                 exit 0
