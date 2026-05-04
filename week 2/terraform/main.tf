@@ -1,3 +1,8 @@
+# 0. Dynamically fetch the current runner's IP for SSH lockdown
+data "http" "my_ip" {
+  url = "https://ifconfig.me/ip"
+}
+
 # 1. Dynamically fetch the latest Ubuntu 22.04 LTS AMI
 data "aws_ami" "ubuntu" {
   most_recent = true
@@ -18,13 +23,14 @@ data "aws_ami" "ubuntu" {
 resource "aws_security_group" "app_sg" {
   name        = "${var.project_name}-sg"
   description = "Allow SSH and App Port"
+  vpc_id      = aws_vpc.main.id
 
-  # SSH Access
+  # SSH Access - Restricted to dynamic IP
   ingress {
     from_port   = 22
     to_port     = 22
     protocol    = "tcp"
-    cidr_blocks = [var.allowed_ssh_ip]
+    cidr_blocks = ["${data.http.my_ip.response_body}/32"]
   }
 
   # Application Access
@@ -55,11 +61,22 @@ resource "aws_instance" "app_server" {
   ami                    = data.aws_ami.ubuntu.id
   instance_type          = var.instance_type
   vpc_security_group_ids = [aws_security_group.app_sg.id]
-  key_name               = var.key_pair_name 
+  subnet_id              = aws_subnet.public.id
+  key_name               = var.key_pair_name
+
+  # User data script runs at instance launch to install Docker and dependencies
+  user_data = file("${path.module}/user_data.sh")
+
+  # Security: Enable EBS Encryption for data at rest
+  root_block_device {
+    encrypted   = true
+    volume_type = "gp3"
+    volume_size = 8
+  }
 
   tags = {
-    Name        = "${var.project_name}-instance"
+    Name        = "${var.project_name}-app-server"
     Environment = "Dev"
-    Owner       = "Intern-Sprint"
+    Project     = var.project_name
   }
 }
