@@ -1,4 +1,3 @@
-# Multi-stage build for security and size optimization
 # Stage 1: Builder - install dependencies
 FROM python:3.11-slim AS builder
 
