@@ -1,0 +1,39 @@
+# ── Terraform state ──────────────────────────────────────────
+*.tfstate
+*.tfstate.backup
+*.tfstate.lock.info
+
+# ── Terraform variable files (may contain secrets) ───────────
+*.tfvars
+*.tfvars.json
+# Keep the example so new engineers know what's needed
+!*.tfvars.example
+
+# ── Terraform plan files (binary, machine-specific) ──────────
+*.tfplan
+tfplan
+tfpan
+
+# ── Terraform working directories ────────────────────────────
+**/.terraform/
+.terraform/
+.terraform.lock.hcl
+
+# ── Crash and debug logs ──────────────────────────────────────
+crash.log
+crash.*.log
+*.log
+
+# ── Sensitive / generated files ───────────────────────────────
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# ── Editor / OS noise ─────────────────────────────────────────
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.swo

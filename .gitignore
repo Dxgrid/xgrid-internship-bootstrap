@@ -1,33 +1,17 @@
-# Logs
-*.log
+# Terraform folders
+.terraform/
 
-# Python
-__pycache__/
-*.py[cod]
-*$py.class
-.Python
-venv/
-env/
+# Terraform state files
+*.tfstate
+*.tfstate.*
 
-# IDE
-.vscode/
-.idea/
-*.swp
-*.swo
+# Sensitive variables (secrets)
+*.tfvars
+*.tfvars.json
 
-# OS
+# Terraform plan files
+*.tfplan
+
+# OS files
 .DS_Store
-Thumbs.db
-
-# Node modules
-node_modules/
-npm-debug.log
-yarn-error.log
-package-lock.json
-yarn.lock
-
-# Generated files
-*.pid
-EXPORTER_COMPARISON.md
-METRICS_FLOW.md
-MONITORING_JOURNEY.md
+.env

@@ -1,0 +1,5 @@
+aws_region   = "us-east-1"
+environment  = "dev"
+project_name = "wordpress-ecs-ha"
+owner_name   = "your-name"
+alert_email  = "you@example.com"
