@@ -93,6 +93,8 @@ module "ecs" {
   min_instances      = var.min_instances
   max_instances      = var.max_instances
   managed_scaling_target_capacity = var.managed_scaling_target_capacity
+
+  depends_on = [module.secrets]
 }
 
 module "monitoring" {
@@ -101,6 +103,7 @@ module "monitoring" {
   project_name                   = local.project_name
   environment                    = local.environment
   alert_email                    = var.alert_email
+  manage_email_subscription      = var.manage_email_subscription
   cluster_name                   = module.ecs.cluster_name
   service_name                   = module.ecs.service_name
   rds_identifier                 = module.rds.rds_identifier

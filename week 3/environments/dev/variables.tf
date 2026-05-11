@@ -27,6 +27,12 @@ variable "alert_email" {
   type        = string
 }
 
+variable "manage_email_subscription" {
+  description = "Whether Terraform should manage the SNS email subscription. Set to false after email confirmation to prevent auto-deletion."
+  type        = bool
+  default     = true
+}
+
 variable "desired_count" {
   description = "Number of WordPress tasks to run (Scaling Simulation)"
   type        = number

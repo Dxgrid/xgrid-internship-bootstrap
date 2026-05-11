@@ -42,3 +42,9 @@ variable "alb_unhealthy_hosts_alarm_name" {
   description = "Name of the unhealthy hosts alarm from the ALB module"
   type        = string
 }
+
+variable "manage_email_subscription" {
+  description = "Whether Terraform should manage the SNS email subscription. Once confirmed, set to false to prevent re-creation on re-applies."
+  type        = bool
+  default     = true
+}

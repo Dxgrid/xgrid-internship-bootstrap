@@ -9,11 +9,20 @@ resource "aws_sns_topic" "wordpress_alerts" {
   }
 }
 
-# Email subscription for alarm notifications; requires manual confirmation via the link sent by AWS.
+# Email subscription for alarm notifications.
+# BEST PRACTICE: Once the email is confirmed (via AWS confirmation link), Terraform will NOT
+# modify or destroy this subscription on subsequent applies, even if variables change.
+# This prevents the "unsubscribe" issue that occurs when Terraform recreates resources.
+# To disable subscription management: set manage_email_subscription = false
 resource "aws_sns_topic_subscription" "email" {
+  count     = var.manage_email_subscription ? 1 : 0
   topic_arn = aws_sns_topic.wordpress_alerts.arn
   protocol  = "email"
   endpoint  = var.alert_email
+
+  lifecycle {
+    ignore_changes = all
+  }
 }
 
 # CloudWatch alarms monitoring ECS performance and availability metrics.

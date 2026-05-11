@@ -98,18 +98,8 @@ resource "aws_secretsmanager_secret" "db" {
   }
 }
 
-# Initial secret version without host; host is populated on the second apply once RDS is available.
+# Publish a single authoritative version so AWSCURRENT always includes every required key.
 resource "aws_secretsmanager_secret_version" "db" {
-  secret_id = aws_secretsmanager_secret.db.id
-  secret_string = jsonencode({
-    username = var.db_username
-    password = random_password.db.result
-    dbname   = var.db_name
-  })
-}
-
-# Complete secret version with RDS host and port; overwrites the initial version after RDS is created.
-resource "aws_secretsmanager_secret_version" "db_with_host" {
   secret_id = aws_secretsmanager_secret.db.id
   secret_string = jsonencode({
     username = var.db_username
