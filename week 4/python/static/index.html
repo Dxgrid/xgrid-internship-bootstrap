@@ -1,0 +1,638 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Temporal Order Management</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <style>
+        :root {
+            --temporal-blue: #001b33;
+            --temporal-light-blue: #0070d2;
+            --glass-bg: rgba(255, 255, 255, 0.95);
+        }
+
+        body {
+            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+            min-height: 100vh;
+            font-family: 'Inter', system-ui, -apple-system, sans-serif;
+            color: var(--temporal-blue);
+        }
+
+        .navbar {
+            background-color: var(--temporal-blue);
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        }
+
+        .card {
+            border: none;
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+            background: var(--glass-bg);
+            margin-bottom: 1.5rem;
+            transition: transform 0.2s ease;
+        }
+
+        .section-header {
+            border-bottom: 2px solid #e9ecef;
+            padding-bottom: 0.75rem;
+            margin-bottom: 1.25rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            font-size: 0.85rem;
+            letter-spacing: 1px;
+            color: #6c757d;
+        }
+
+        .status-badge {
+            font-weight: 600;
+            padding: 0.5em 1em;
+            border-radius: 20px;
+        }
+
+        .btn-temporal {
+            background-color: var(--temporal-light-blue);
+            color: white;
+            border: none;
+            font-weight: 600;
+        }
+
+        .btn-temporal:hover {
+            background-color: #005fb8;
+            color: white;
+        }
+
+        .progress {
+            height: 10px;
+            border-radius: 5px;
+            background-color: #e9ecef;
+        }
+
+        #health-indicator {
+            font-size: 0.9rem;
+        }
+
+        .order-item-tag {
+            background: #e9ecef;
+            padding: 2px 10px;
+            border-radius: 4px;
+            margin-right: 5px;
+            font-size: 0.8rem;
+        }
+
+        .timeline {
+            border-left: 2px solid #e9ecef;
+            padding-left: 20px;
+            position: relative;
+            margin-top: 10px;
+        }
+
+        .timeline-item {
+            position: relative;
+            margin-bottom: 15px;
+        }
+
+        .timeline-item::before {
+            content: "";
+            position: absolute;
+            left: -27px;
+            top: 5px;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: var(--temporal-light-blue);
+            border: 2px solid white;
+        }
+
+        .timeline-time {
+            font-size: 0.75rem;
+            color: #6c757d;
+            display: block;
+        }
+
+        .timeline-text {
+            font-size: 0.85rem;
+            font-weight: 500;
+        }
+
+        pre.json-view {
+            background: #f8f9fa;
+            padding: 10px;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+    </style>
+</head>
+
+<body>
+
+    <nav class="navbar navbar-dark mb-4">
+        <div class="container">
+            <span class="navbar-brand mb-0 h1">
+                <i class="bi bi-cart-fill me-2"></i> Order Management System
+            </span>
+            <div id="health-indicator" class="text-light">
+                Health: <span id="health-status"><i class="bi bi-circle-fill text-secondary"></i> Checking...</span>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container">
+        <div class="row">
+            <!-- Section 1: Place Order -->
+            <div class="col-lg-5">
+                <div class="card p-4">
+                    <div class="section-header">[ PLACE ORDER ]</div>
+                    <form id="placeOrderForm">
+                        <div class="mb-3">
+                            <label for="orderId" class="form-label">Order ID</label>
+                            <input type="text" class="form-control" id="orderId" placeholder="ORD-1001" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="address" class="form-label">Shipping Address</label>
+                            <input type="text" class="form-control" id="address" value="1 Main Street, Austin, TX"
+                                required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Included Items</label>
+                            <div class="d-flex flex-wrap gap-2">
+                                <span class="order-item-tag"><i class="bi bi-check-circle-fill text-success"></i>
+                                    Keyboard</span>
+                                <span class="order-item-tag"><i class="bi bi-check-circle-fill text-success"></i>
+                                    Mouse</span>
+                                <span class="order-item-tag"><i class="bi bi-check-circle-fill text-success"></i>
+                                    Monitor</span>
+                            </div>
+                        </div>
+                        <button type="submit" class="btn btn-temporal w-100" id="startOrderBtn">
+                            <i class="bi bi-play-fill"></i> Start Order
+                        </button>
+                    </form>
+                    <div id="placeOrderResult" class="mt-3"></div>
+                </div>
+            </div>
+
+            <!-- Section 2: Order Status -->
+            <div class="col-lg-7">
+                <div class="card p-4">
+                    <div class="section-header">[ ORDER STATUS ]</div>
+                    <div class="input-group mb-3">
+                        <input type="text" id="statusWorkflowId" class="form-control" placeholder="order-ORD-1001">
+                        <button class="btn btn-outline-secondary" type="button" id="checkStatusBtn">
+                            <i class="bi bi-search"></i> Check Status
+                        </button>
+                    </div>
+
+                    <div id="statusCard" class="border rounded p-3 d-none">
+                        <div class="d-flex justify-content-between align-items-start mb-3">
+                            <div>
+                                <h5 id="statusOrderId" class="mb-0">ORD-1001</h5>
+                                <small id="statusFullWfId" class="text-muted d-block mb-1"></small>
+                                <span id="execBadge" class="badge rounded-pill bg-dark">UNKNOWN</span>
+                            </div>
+                            <span id="statusBadge" class="status-badge badge bg-secondary">UNKNOWN</span>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label d-flex justify-content-between">
+                                <span>Workflow Step: <span id="statusStepName" class="fw-bold">N/A</span></span>
+                                <span id="statusProgressText">0%</span>
+                            </label>
+                            <div class="progress">
+                                <div id="statusBar" class="progress-bar progress-bar-striped progress-bar-animated"
+                                    role="progressbar" style="width: 0%"></div>
+                            </div>
+                        </div>
+
+                        <div class="row mb-3">
+                            <div class="col-6">
+                                <label class="small text-muted d-block">Current Address</label>
+                                <span id="statusAddress" class="fw-medium">N/A</span>
+                            </div>
+                            <div class="col-6">
+                                <label class="small text-muted d-block">Shipped Items</label>
+                                <span id="statusShippedItems" class="fw-medium">None</span>
+                            </div>
+                        </div>
+
+                        <div class="d-flex flex-wrap gap-2 mb-4" id="statusActions">
+                            <button class="btn btn-success btn-sm d-none align-items-center gap-1" id="proceedBtn">
+                                <i class="bi bi-cash-coin"></i> Validate & Pay
+                            </button>
+                            <button class="btn btn-outline-warning btn-sm d-flex align-items-center gap-1"
+                                id="updateAddressBtn">
+                                <i class="bi bi-geo-alt"></i> Update Address
+                            </button>
+                            <button class="btn btn-outline-danger btn-sm d-flex align-items-center gap-1"
+                                id="cancelOrderBtn">
+                                <i class="bi bi-x-circle"></i> Cancel Order
+                            </button>
+                            <button class="btn btn-outline-secondary btn-sm ms-auto" id="toggleRawBtn">
+                                <i class="bi bi-code-slash"></i> View Raw
+                            </button>
+                        </div>
+
+                        <div id="rawView" class="d-none mb-4">
+                            <div class="section-header small mb-2">[ RAW TEMPORAL STATE ]</div>
+                            <pre id="jsonOutput" class="json-view"></pre>
+                        </div>
+
+                        <div id="timelineContainer">
+                            <div class="section-header small mb-2">[ EXECUTION TIMELINE ]</div>
+                            <div class="timeline" id="eventTimeline">
+                                <!-- Events will appear here -->
+                            </div>
+                        </div>
+                    </div>
+                    <div id="statusError" class="alert alert-danger d-none mt-2"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Section 3: All Orders -->
+        <div class="row">
+            <div class="col-12">
+                <div class="card p-4">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <div class="section-header mb-0">[ ALL ORDERS ]</div>
+                        <div class="d-flex gap-2">
+                            <select id="statusFilter" class="form-select form-select-sm" style="width: auto;">
+                                <option value="">All Statuses</option>
+                                <option value="RUNNING">RUNNING</option>
+                                <option value="COMPLETED">COMPLETED</option>
+                                <option value="CANCELLED">CANCELLED</option>
+                                <option value="FAILED">FAILED</option>
+                            </select>
+                            <button class="btn btn-light btn-sm" id="refreshOrdersBtn">
+                                <i class="bi bi-arrow-clockwise"></i> Refresh
+                            </button>
+                        </div>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Workflow ID</th>
+                                    <th>Execution</th>
+                                    <th>Order Status</th>
+                                    <th>Action</th>
+                                </tr>
+                            </thead>
+                            <tbody id="ordersTableBody">
+                                <tr>
+                                    <td colspan="4" class="text-center">Loading orders...</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modals -->
+    <div class="modal fade" id="updateAddressModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Update Shipping Address</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <input type="text" id="newAddressInput" class="form-control" placeholder="Enter new address">
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                    <button type="button" class="btn btn-primary d-flex align-items-center gap-2"
+                        id="confirmUpdateAddress">
+                        Update
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = "";
+        let currentWorkflowId = null;
+        let eventHistory = {}; // Keep track of seen events per workflow
+
+        const STATUS_MAP = {
+            'PENDING': { color: 'secondary', progress: 5, log: 'Order initialized.' },
+            'FRAUD_CHECKING': { color: 'info', progress: 15, log: 'Fraud check activity started.' },
+            'PREPARING_SHIPMENT': { color: 'warning', progress: 30, log: 'Inventory reservation started.' },
+            'AWAITING_VALIDATION': { color: 'info', progress: 50, log: 'Workflow paused: Awaiting validation signal.' },
+            'CHARGING': { color: 'primary', progress: 70, log: 'Payment processing (with retries).' },
+            'SHIPPING': { color: 'primary', progress: 85, log: 'Parallel shipping workflows initiated.' },
+            'NOTIFYING': { color: 'info', progress: 95, log: 'Sending final notification.' },
+            'COMPLETED': { color: 'success', progress: 100, log: 'Workflow completed successfully.' },
+            'CANCELLED': { color: 'danger', progress: 100, log: 'Order cancelled: Running compensations.' },
+            'FAILED': { color: 'danger', progress: 100, log: 'Workflow failed.' }
+        };
+
+        async function checkHealth() {
+            try {
+                const res = await fetch(`${API_BASE}/health`);
+                const data = await res.json();
+                const statusEl = document.getElementById('health-status');
+                if (res.ok && data.status === 'ok') {
+                    statusEl.innerHTML = '<i class="bi bi-circle-fill text-success"></i> Connected';
+                } else {
+                    statusEl.innerHTML = '<i class="bi bi-circle-fill text-danger"></i> Disconnected';
+                }
+            } catch (e) {
+                document.getElementById('health-status').innerHTML = '<i class="bi bi-circle-fill text-danger"></i> Error';
+            }
+        }
+
+        function addTimelineEvent(wfId, status) {
+            if (!eventHistory[wfId]) eventHistory[wfId] = new Set();
+            if (eventHistory[wfId].has(status)) return;
+
+            eventHistory[wfId].add(status);
+            const timeline = document.getElementById('eventTimeline');
+            const item = document.createElement('div');
+            item.className = 'timeline-item';
+            const now = new Date().toLocaleTimeString();
+            const logText = STATUS_MAP[status]?.log || `Status changed to ${status}`;
+
+            item.innerHTML = `
+            <span class="timeline-time">${now}</span>
+            <span class="timeline-text">${logText}</span>
+        `;
+            timeline.prepend(item);
+        }
+
+        document.getElementById('placeOrderForm').onsubmit = async (e) => {
+            e.preventDefault();
+            const btn = document.getElementById('startOrderBtn');
+            const resDiv = document.getElementById('placeOrderResult');
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Starting...';
+
+            const orderData = {
+                order_id: document.getElementById('orderId').value,
+                address: document.getElementById('address').value,
+                items: [
+                    { item_id: 1001, description: "Keyboard", quantity: 1 },
+                    { item_id: 1002, description: "Mouse", quantity: 1 },
+                    { item_id: 1003, description: "Monitor", quantity: 2 }
+                ]
+            };
+
+            try {
+                const res = await fetch(`${API_BASE}/orders`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(orderData)
+                });
+                const data = await res.json();
+
+                if (res.ok) {
+                    resDiv.innerHTML = `<div class="alert alert-success">Order started! ID: <strong>${data.workflow_id}</strong></div>`;
+                    document.getElementById('statusWorkflowId').value = data.workflow_id;
+                    currentWorkflowId = data.workflow_id;
+                    document.getElementById('eventTimeline').innerHTML = ''; // Reset timeline
+                    await getStatus(data.workflow_id);
+                    await listOrders();
+                } else {
+                    resDiv.innerHTML = `<div class="alert alert-danger">${data.detail || 'Error'}</div>`;
+                }
+            } catch (err) {
+                resDiv.innerHTML = `<div class="alert alert-danger">Network error</div>`;
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = '<i class="bi bi-play-fill"></i> Start Order';
+            }
+        };
+
+        async function getStatus(workflowId) {
+            if (!workflowId) return;
+            const card = document.getElementById('statusCard');
+            const error = document.getElementById('statusError');
+
+            try {
+                const res = await fetch(`${API_BASE}/orders/${encodeURIComponent(workflowId)}`);
+                if (!res.ok) throw new Error(await res.text());
+
+                const data = await res.json();
+                error.classList.add('d-none');
+                card.classList.remove('d-none');
+
+                document.getElementById('jsonOutput').innerText = JSON.stringify(data, null, 2);
+                document.getElementById('statusOrderId').innerText = data.order_id;
+                document.getElementById('statusFullWfId').innerText = data.workflow_id;
+                document.getElementById('statusStepName').innerText = data.step;
+                document.getElementById('statusAddress').innerText = data.address;
+                document.getElementById('statusShippedItems').innerText = data.shipped_items.length > 0 ? data.shipped_items.join(', ') : 'None';
+
+                const activeStatus = (data.order_status || data.step || 'PENDING').toUpperCase();
+                const config = STATUS_MAP[activeStatus] || { color: 'secondary', progress: 0 };
+
+                // Add to timeline
+                addTimelineEvent(workflowId, activeStatus);
+
+                const badge = document.getElementById('statusBadge');
+                badge.className = `status-badge badge bg-${config.color}`;
+                badge.innerText = activeStatus;
+
+                const badgeColorMap = {
+                    'RUNNING': 'primary',
+                    'COMPLETED': 'success',
+                    'CANCELLED': 'danger',
+                    'FAILED': 'danger',
+                    'TERMINATED': 'danger',
+                    'TIMED_OUT': 'danger'
+                };
+
+                const execBadge = document.getElementById('execBadge');
+                const execStatus = (data.execution_status || 'UNKNOWN').toUpperCase();
+                execBadge.innerText = execStatus;
+                execBadge.className = `badge rounded-pill bg-${badgeColorMap[execStatus] || 'dark'}`;
+
+                const bar = document.getElementById('statusBar');
+                bar.className = `progress-bar progress-bar-striped progress-bar-animated bg-${config.color}`;
+                bar.style.width = `${config.progress}%`;
+                document.getElementById('statusProgressText').innerText = `${config.progress}%`;
+
+                // Action Visibility
+                const actions = document.getElementById('statusActions');
+                const proceedBtn = document.getElementById('proceedBtn');
+
+                // Robust visibility check for Validate & Pay
+                if ((activeStatus === 'AWAITING_VALIDATION' || data.step === 'awaiting_validation') && execStatus === 'RUNNING') {
+                    proceedBtn.classList.remove('d-none');
+                    proceedBtn.classList.add('d-flex');
+                } else {
+                    proceedBtn.classList.add('d-none');
+                    proceedBtn.classList.remove('d-flex');
+                }
+
+                if (execStatus !== 'RUNNING') {
+                    actions.querySelectorAll('button:not(#toggleRawBtn)').forEach(b => b.disabled = true);
+                } else {
+                    actions.querySelectorAll('button:not(#toggleRawBtn)').forEach(b => b.disabled = false);
+                }
+
+            } catch (err) {
+                card.classList.add('d-none');
+                error.classList.remove('d-none');
+                error.innerText = "Order not found.";
+            }
+        }
+
+        document.getElementById('checkStatusBtn').onclick = () => {
+            const id = document.getElementById('statusWorkflowId').value;
+            if (id !== currentWorkflowId) {
+                document.getElementById('eventTimeline').innerHTML = '';
+                eventHistory[id] = new Set();
+            }
+            currentWorkflowId = id;
+            getStatus(id);
+        };
+
+        async function listOrders() {
+            const filter = document.getElementById('statusFilter').value;
+            const tbody = document.getElementById('ordersTableBody');
+            try {
+                const url = filter ? `${API_BASE}/orders?status=${filter}` : `${API_BASE}/orders`;
+                const res = await fetch(url);
+                const data = await res.json();
+                tbody.innerHTML = '';
+                if (data.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="4" class="text-center">No orders.</td></tr>';
+                    return;
+                }
+                data.forEach(order => {
+                    const statusColor = (STATUS_MAP[order.order_status] || { color: 'secondary' }).color;
+                    const tr = document.createElement('tr');
+                    tr.innerHTML = `
+                    <td><code>${order.workflow_id}</code></td>
+                    <td><span class="badge rounded-pill bg-dark">${order.status}</span></td>
+                    <td><span class="badge bg-${statusColor}">${order.order_status || 'N/A'}</span></td>
+                    <td><button class="btn btn-sm btn-link p-0" onclick="viewOrder('${order.workflow_id}')">View</button></td>
+                `;
+                    tbody.appendChild(tr);
+                });
+            } catch (e) {
+                tbody.innerHTML = '<tr><td colspan="4" class="text-center text-danger">Error.</td></tr>';
+            }
+        }
+
+        function viewOrder(id) {
+            document.getElementById('statusWorkflowId').value = id;
+            if (id !== currentWorkflowId) {
+                document.getElementById('eventTimeline').innerHTML = '';
+                eventHistory[id] = new Set();
+            }
+            currentWorkflowId = id;
+            getStatus(id);
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+
+        document.getElementById('proceedBtn').onclick = async () => {
+            const btn = document.getElementById('proceedBtn');
+            const wfId = document.getElementById('statusFullWfId').innerText;
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Processing...';
+            try {
+                const res = await fetch(`${API_BASE}/orders/${encodeURIComponent(wfId)}/signal/proceed`, { method: 'POST' });
+                if (res.ok) await getStatus(wfId);
+                else alert("Failed to proceed.");
+            } catch (e) { alert("Error."); }
+            finally {
+                btn.disabled = false;
+                btn.innerHTML = '<i class="bi bi-cash-coin"></i> Validate & Pay';
+            }
+        };
+
+        document.getElementById('toggleRawBtn').onclick = () => {
+            const raw = document.getElementById('rawView');
+            raw.classList.toggle('d-none');
+        };
+
+        const updateModal = new bootstrap.Modal(document.getElementById('updateAddressModal'));
+        document.getElementById('updateAddressBtn').onclick = () => {
+            document.getElementById('newAddressInput').value = document.getElementById('statusAddress').innerText;
+            updateModal.show();
+        };
+        document.getElementById('confirmUpdateAddress').onclick = async () => {
+            const btn = document.getElementById('confirmUpdateAddress');
+            const wfId = document.getElementById('statusFullWfId').innerText;
+            const addr = document.getElementById('newAddressInput').value;
+            btn.disabled = true;
+            try {
+                const res = await fetch(`${API_BASE}/orders/${encodeURIComponent(wfId)}/signal/address`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ address: addr })
+                });
+                if (res.ok) { updateModal.hide(); await getStatus(wfId); }
+            } catch (e) { } finally { btn.disabled = false; }
+        };
+
+        document.getElementById('cancelOrderBtn').onclick = async () => {
+            const btn = document.getElementById('cancelOrderBtn');
+            const wfId = document.getElementById('statusFullWfId').textContent.trim();
+            if (!wfId) {
+                alert("No workflow ID found to cancel.");
+                return;
+            }
+            if (!confirm(`Are you sure you want to cancel order ${wfId}?`)) return;
+
+            btn.disabled = true;
+            const originalHtml = btn.innerHTML;
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Cancelling...';
+
+            try {
+                const res = await fetch(`${API_BASE}/orders/${encodeURIComponent(wfId)}/cancel`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+
+                if (res.ok) {
+                    const data = await res.json();
+                    console.log("Cancellation successful:", data);
+                    // Refresh status after a short delay to allow Temporal to update search attributes
+                    setTimeout(() => {
+                        getStatus(wfId);
+                        listOrders();
+                    }, 800);
+                } else {
+                    const errData = await res.json();
+                    alert(`Failed to cancel: ${errData.detail || 'Unknown error'}`);
+                    btn.disabled = false;
+                    btn.innerHTML = originalHtml;
+                }
+            } catch (e) {
+                console.error("Error during cancellation:", e);
+                alert("Network error while trying to cancel order.");
+                btn.disabled = false;
+                btn.innerHTML = originalHtml;
+            }
+        };
+
+        document.getElementById('refreshOrdersBtn').onclick = listOrders;
+        document.getElementById('statusFilter').onchange = listOrders;
+
+        setInterval(checkHealth, 5000);
+        setInterval(() => {
+            const id = document.getElementById('statusWorkflowId').value;
+            if (id && !document.getElementById('statusCard').classList.contains('d-none')) {
+                const exec = document.getElementById('execBadge').innerText;
+                if (exec === 'RUNNING') getStatus(id);
+            }
+            listOrders();
+        }, 2000);
+
+        checkHealth();
+        listOrders();
+    </script>
+</body>
+
+</html>

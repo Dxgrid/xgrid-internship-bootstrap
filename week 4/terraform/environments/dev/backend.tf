@@ -1,0 +1,9 @@
+terraform {
+  backend "s3" {
+    bucket       = "temporal-order-terraform-state"
+    key          = "week4/temporal/dev/terraform.tfstate"
+    region       = "us-east-1"
+    encrypt      = true
+    use_lockfile = true
+  }
+}
