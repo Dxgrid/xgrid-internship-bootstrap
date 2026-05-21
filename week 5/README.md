@@ -1,378 +1,287 @@
-![Terraform](https://img.shields.io/badge/Terraform-%3E%3D1.5.0-purple) ![AWS](https://img.shields.io/badge/AWS-us--east--1-orange) ![Status](https://img.shields.io/badge/Status-Production--Ready-green)
-Module: SRE-102 | Author: SRE Intern Week 5
+# WordPress ECS HA — SRE Observability Platform
 
-## Table of Contents
+## 1. Project Overview
 
-1. [Architecture Overview](#1-architecture-overview)
-2. [What's New in Week 5](#2-whats-new-in-week-5)
-3. [Module Reference](#3-module-reference)
-4. [SLI / SLO Definitions](#4-sli--slo-definitions)
-5. [Prerequisites & Setup](#5-prerequisites--setup)
-6. [Deployment](#6-deployment)
-7. [Monitoring Stack Access](#7-monitoring-stack-access)
-8. [Daily Reliability Report](#8-daily-reliability-report)
-9. [Failure Injection Tests](#9-failure-injection-tests)
-10. [Troubleshooting](#10-troubleshooting)
-11. [Cost Analysis](#11-cost-analysis)
-12. [Teardown](#12-teardown)
+WordPress ECS HA is a production-pattern WordPress deployment on Amazon ECS (EC2 launch type) built as the Week 3–5 SRE internship project. The Week 3 foundation provides high-availability WordPress across two Availability Zones with an Application Load Balancer, RDS MySQL on private subnets, EFS-backed shared storage, and an Auto Scaling Group. Week 5 adds a complete SRE observability layer: Prometheus and Grafana for real-time host and application metrics, ten CloudWatch alarms with SNS email notification, a daily automated reliability report that evaluates four SLOs, and a documented runbook covering all fourteen alert conditions.
+
+The monitoring stack runs on a dedicated EC2 instance that is architecturally separate from the ECS cluster it monitors. If ECS degrades or tasks crash, Prometheus and Grafana remain operational and provide the signal needed to diagnose the failure without depending on the system under observation.
 
 ---
 
-## 1. Architecture Overview
+## 2. Architecture
 
 ```
-Internet ──► IGW ──► ALB (Port 80)
-                       │
-         ┌─────────────┼──────── /grafana ────────────────────────┐
-         ▼             ▼                                           ▼
-   ECS Task (AZ-1)  ECS Task (AZ-2)                  Monitoring EC2 (t2.micro)
-   Private Subnet   Private Subnet                    Public Subnet
-         │                 │                                       │
-         ├─ Node Exporter  ├─ Node Exporter ◄─── Prometheus (:9090)
-         │     :9100       │       :9100               │
-         └────────┬────────┘               Grafana (:3000) ◄── ALB /grafana
-                  │                                  │
-             RDS MySQL                    CloudWatch (IAM role)
-             EFS Volume                              │
-                                         Daily Report Script (Python)
-                                                     │
-                                              Email (SMTP)
+Internet → ALB (port 80)
+               │
+    ┌──────────┼──────────────── /grafana ──────────────┐
+    ▼          ▼                                        ▼
+ECS Task    ECS Task                         Monitoring EC2 (public subnet)
+(AZ-1)      (AZ-2)                           ├── Prometheus :9090
+    │            │                            ├── Grafana :3000
+    └── Node Exporter :9100 ◄─── scrape ─────┘
+         │                                   │
+    RDS MySQL                        CloudWatch API
+    EFS /var/www/html                daily-reliability-report.py (06:00 UTC)
 ```
 
-**Key principle:** The monitoring stack (Prometheus + Grafana) runs on a *separate* EC2 from the WordPress workload. If the ECS cluster degrades, the monitoring system stays up and tells you why. This is a foundational SRE separation-of-concerns principle.
+- **vpc** — VPC (10.0.0.0/16), 2 public and 2 private subnets across 2 AZs, NAT gateway, internet gateway, and route tables.
+- **security_groups** — All security group definitions and inter-group ingress rules for the ALB, ECS tasks, RDS, EFS, and monitoring EC2.
+- **secrets** — KMS CMK with automatic key rotation and a Secrets Manager secret containing auto-generated DB credentials; credentials are injected into ECS tasks at runtime via the `secrets:` block.
+- **efs** — Encrypted EFS file system with a dedicated access point for WordPress `/var/www/html` uploads shared across ECS tasks for persistent media storage.
+- **rds** — MySQL 8.0 on `db.t3.micro` with encrypted gp3 storage, slow query logging, 7-day automated backups, and CloudWatch alarms for CPU utilization, free storage, and connection count.
+- **alb** — Public Application Load Balancer with WordPress and Grafana target groups; a path-based listener rule routes `/grafana*` traffic to the monitoring EC2 at priority 10; CloudWatch alarms for 5xx rate, unhealthy hosts, and traffic drop.
+- **ecs** — EC2 launch template with Node Exporter user data (port 9100), Auto Scaling Group (1–2 instances), ECS cluster with Container Insights enabled, WordPress task definition, and an ECS service with session stickiness.
+- **monitoring** — SNS alerts topic, CloudWatch alarms for ECS CPU/memory/task count, a composite alarm combining task count and ALB health checks, and a CloudWatch dashboard.
+- **prometheus** — Dedicated `t2.micro` EC2 running Prometheus and Grafana via Docker Compose; S3 bucket for monitoring assets downloaded at boot; IAM role with CloudWatch and ECS read permissions; cron jobs for ECS node discovery and the daily reliability report.
+- **grafana** — CloudWatch alarm that fires when the Grafana ALB target group reports unhealthy hosts; CloudWatch log group for Grafana container logs (7-day retention).
 
 ---
 
-## 2. What's New in Week 5
+## 3. Prerequisites
 
-Built on the Week 3 WordPress-on-ECS foundation, Week 5 adds a complete observability layer:
-
-| Component | Description |
-|-----------|-------------|
-| **Node Exporter** | Docker container on each ECS EC2 host (host network, port 9100). Exports CPU, memory, disk, and network metrics for Prometheus scraping. |
-| **Prometheus** | Docker container on a dedicated monitoring EC2 (`prom/prometheus:v2.52.0`). Scrapes Node Exporter via file-based service discovery — auto-discovers ECS EC2 private IPs every 5 minutes via `aws ec2 describe-instances`. |
-| **Grafana** | Docker container on the same monitoring EC2 (`grafana/grafana:10.4.2`). Pre-provisioned with Prometheus + CloudWatch datasources. Dashboard combines host metrics and AWS service metrics. Exposed via ALB at `/grafana`. |
-| **Daily Reliability Report** | Python script (`scripts/daily-reliability-report.py`) — collects metrics from ECS, EC2, ALB, RDS, and Prometheus, evaluates 4 SLOs, generates a structured plain-text report, and sends via SMTP email. Runs as a daily cron job on the monitoring EC2. |
-| **SLI/SLO Definitions** | 4 SLOs with measurable SLIs, alert thresholds, and an error budget policy (see section 4). |
-| **SRE Documentation** | Runbook (`docs/runbook.md`), escalation flow (`docs/escalation-flow.md`), and incident post-mortem template (`docs/incident-template.md`). |
-| **Grafana Dashboard JSON** | `dashboards/wordpress-overview.json` — importable/provisionable dashboard with ECS, ALB, RDS, Node Exporter, and SLO status panels. |
-
-**Bug fixes applied from the Week 3 audit:**
-
-| Fix | File | Change |
-|-----|------|--------|
-| RDS storage autoscaling disabled | `modules/rds/main.tf` | `max_allocated_storage`: 20 → 100; `storage_type`: gp2 → gp3 |
-| ECS Terraform fights autoscaler | `modules/ecs/main.tf` | Added `lifecycle { ignore_changes = [desired_count, task_definition] }` |
-| EFS has no backup | `modules/efs/main.tf` | Added `aws_efs_backup_policy` with `status = "ENABLED"` |
-| Secret instantly deleted | `modules/secrets/main.tf` | `recovery_window_in_days = 0` → parameterised (default 7) |
-| Monitoring region hardcoded | `modules/monitoring/main.tf` | All `"us-east-1"` replaced with `var.aws_region` |
-| CPU/memory alarms silent when ECS down | `modules/monitoring/main.tf` | Added `treat_missing_data = "notBreaching"` |
-| Lock file excluded from git | `.gitignore` | Removed `.terraform.lock.hcl` line |
+1. Terraform >= 1.10.0
+2. AWS CLI configured with account `432500708329` access
+3. AWS provider 5.x
+4. An S3 bucket for state: `wordpress-ecs-tfstate-xgrid-1779080592` (must exist before init)
+5. Python 3.8+ with `boto3` and `requests` (for daily report)
+6. A Gmail app password if SMTP email sending is needed (optional — SNS is used by default)
 
 ---
 
-## 3. Module Reference
-
-| Module | AWS Resources | New in Week 5? |
-|--------|--------------|----------------|
-| `vpc` | VPC, subnets, NAT Gateway, IGW, route tables | No |
-| `security_groups` | 5 SGs + `aws_security_group_rule.ecs_allow_node_exporter` | Extended |
-| `secrets` | KMS CMK, Secrets Manager secret | Bug fixes only |
-| `efs` | EFS file system, access point, mount targets, backup policy | Bug fix (backup) |
-| `rds` | RDS MySQL 8.0, parameter group, CloudWatch alarms | Bug fixes only |
-| `ecs` | ECS cluster, launch template, ASG, task definition, service | Extended (Node Exporter in user_data) |
-| `alb` | ALB, 2 target groups (WordPress + Grafana), HTTP listener + listener rule | Extended |
-| `monitoring` | SNS topic, 4 CloudWatch alarms, composite alarm, dashboard | Extended (region fix) |
-| `prometheus` | EC2 instance, IAM role/policy, instance profile, ALB TG attachment | **NEW** |
-| `grafana` | CloudWatch log group, Grafana health alarm | **NEW** |
-
----
-
-## 4. SLI / SLO Definitions
-
-| SLO | SLI | Target | Monthly Error Budget | Alert Threshold |
-|-----|-----|--------|---------------------|-----------------|
-| **SLO-1: HTTP Availability** | `(requests - 5xx) / requests` over 30-min rolling window | ≥ 99.5% | 3h 36m downtime | < 99.9% for 10 min |
-| **SLO-2: p95 Latency** | ALB `TargetResponseTime` p95 per 5-min window | ≤ 2.0s for 95% of windows | 36 windows/month above threshold | p95 > 3.0s for 2 periods |
-| **SLO-3: Task Availability** | `RunningTaskCount / 2` | ≥ 1 task running 99.9% of time | 43.8 min/month at < 1 task | Existing composite alarm |
-| **SLO-4: RDS Storage** | `FreeStorageSpace` minimum in 24h window | > 5 GB at all times | N/A (hard limit) | < 2 GB (existing alarm) |
-
-**Error Budget Policy:**
-
-| Budget Consumed | Action |
-|----------------|--------|
-| 0–50% | No deployment restrictions |
-| 50–75% | Deployments require explicit approval |
-| 75–100% | Freeze non-emergency deployments |
-| 100% breached | Mandatory post-mortem within 48 hours |
-
----
-
-## 5. Prerequisites & Setup
-
-| Tool | Version | Purpose |
-|------|---------|---------|
-| Terraform | ≥ 1.5.0 | Infrastructure provisioning |
-| AWS CLI | v2 | Resource inspection and debugging |
-| Python 3 | ≥ 3.8 | Daily reliability report script |
-| boto3 | latest | `pip3 install boto3 requests` |
+## 4. Quick Start
 
 ```bash
-aws configure
-```
+# Clone and navigate
+cd "week 5/environments/dev"
 
-Initialize the remote state S3 backend:
-```bash
-chmod +x scripts/create-remote-state.sh
-./scripts/create-remote-state.sh
-```
+# Copy example vars and fill in required values
+cp terraform.tfvars.example terraform.tfvars
+# Required: set grafana_admin_password and owner_name
 
-Create your `terraform.tfvars`:
-```bash
-cp environments/dev/terraform.tfvars.example environments/dev/terraform.tfvars
-```
-
-Edit `environments/dev/terraform.tfvars`:
-```hcl
-aws_region             = "us-east-1"
-environment            = "dev"
-project_name           = "wordpress-ecs-ha"
-owner_name             = "your-name"
-alert_email            = "you@example.com"
-grafana_admin_password = "your-secure-password"
-manage_email_subscription = true
-```
-
-> `terraform.tfvars` is excluded from git. Never commit it — it contains your Grafana admin password.
-
----
-
-## 6. Deployment
-
-```bash
-cd environments/dev
+# Initialize Terraform
 terraform init
-terraform validate
-terraform plan -out=tfplan
+
+# Preview changes
+terraform plan -out=tfplan -var 'grafana_admin_password=YOUR_PASSWORD'
+
+# Apply
 terraform apply tfplan
+
+# Verify outputs
+terraform output
 ```
-
-| Resource | Estimated Time |
-|----------|---------------|
-| VPC Networking | 30s |
-| RDS MySQL | 12m |
-| ECS Cluster + ASG | 5m |
-| ALB | 3m |
-| Monitoring EC2 (bootstrap) | 5-8m (Docker Compose starts after EC2 is up) |
-| **Total** | **~25m** |
-
-Key outputs to note:
-```bash
-terraform output alb_dns_name          # WordPress: http://<dns>/
-terraform output grafana_url           # Grafana:   http://<dns>/grafana
-terraform output prometheus_direct_url # Prometheus: http://<ip>:9090 (dev debug)
-terraform output monitoring_ec2_public_ip
-```
-
-> **SNS Confirmation:** Check your email inbox for the AWS Subscription Confirmation link and click it to enable CloudWatch alarm notifications.
 
 ---
 
-## 7. Monitoring Stack Access
+## 5. Accessing the Stack
 
-### Grafana
-1. Open `terraform output grafana_url` in a browser.
-2. Login: username `admin`, password = `grafana_admin_password` from tfvars.
-3. Navigate to **Dashboards → WordPress ECS HA — SRE Overview**.
-4. All panels auto-populate — no manual datasource setup needed.
+| Resource | URL | Notes |
+|---|---|---|
+| WordPress | `http://<alb_dns_name from terraform output>` | Takes 2-3 min after apply for ECS tasks to start |
+| Grafana | `http://wordpress-ecs-ha-dev-alb-1325349632.us-east-1.elb.amazonaws.com/grafana` | Login: `admin` / `grafana_admin_password` from tfvars |
+| Prometheus | `http://98.92.178.35:9090` | Dev access only — not behind ALB |
+| Daily Report | `/var/log/daily-report.log` on monitoring EC2 | Runs 06:00 UTC (11:00 AM PKT) via cron |
+
+---
+
+## 6. Module Structure
+
+```
+week 5/
+├── dashboards/
+│   └── wordpress-overview.json
+├── docs/
+│   └── runbook.md
+├── environments/
+│   └── dev/
+│       ├── backend.tf
+│       ├── main.tf
+│       ├── outputs.tf
+│       ├── provider.tf
+│       ├── terraform.tfvars.example
+│       └── variables.tf
+├── modules/
+│   ├── alb/
+│   │   ├── main.tf
+│   │   ├── outputs.tf
+│   │   └── variables.tf
+│   ├── ecs/
+│   │   ├── main.tf
+│   │   ├── outputs.tf
+│   │   └── variables.tf
+│   ├── efs/
+│   │   ├── main.tf
+│   │   ├── outputs.tf
+│   │   └── variables.tf
+│   ├── grafana/
+│   │   ├── main.tf
+│   │   ├── outputs.tf
+│   │   └── variables.tf
+│   ├── monitoring/
+│   │   ├── main.tf
+│   │   ├── outputs.tf
+│   │   └── variables.tf
+│   ├── prometheus/
+│   │   ├── main.tf
+│   │   ├── outputs.tf
+│   │   ├── user_data.sh.tpl
+│   │   └── variables.tf
+│   ├── rds/
+│   │   ├── main.tf
+│   │   ├── outputs.tf
+│   │   └── variables.tf
+│   ├── secrets/
+│   │   ├── main.tf
+│   │   ├── outputs.tf
+│   │   └── variables.tf
+│   ├── security_groups/
+│   │   ├── main.tf
+│   │   ├── outputs.tf
+│   │   └── variables.tf
+│   └── vpc/
+│       ├── main.tf
+│       ├── outputs.tf
+│       └── variables.tf
+├── scripts/
+│   ├── create-remote-state.sh
+│   └── daily-reliability-report.py
+├── .gitignore
+└── README.md
+```
+
+---
+
+## 7. SLOs
+
+| SLO | Target | Error Budget | Alarm |
+|---|---|---|---|
+| SLO-1: HTTP Availability | ≥ 99.5% per rolling 30 days | 216 min/month | `alb-5xx` > 0.5% for 2 min |
+| SLO-2: p95 Latency | ≤ 2.0s at the 95th percentile | 36 windows/month above threshold | Report check only |
+| SLO-3: Running Tasks | ≥ 1 task running at all times | 43.8 min/month below 1 task | `ecs-low-task-count` < 2 for 1 min |
+| SLO-4: RDS Free Storage | > 5.0 GB at all times | N/A (hard limit) | `rds-low-storage` < 2 GB |
+
+- 0–50% consumed → no restrictions
+- 50–75% consumed → deployments require approval
+- 75–100% consumed → freeze non-emergency deployments
+- 100% consumed → mandatory post-mortem within 48 hours
+
+---
+
+## 8. Observability Stack
 
 ### Prometheus
-```bash
-# Direct access (dev only — port 9090 is not behind ALB)
-open $(terraform output -raw prometheus_direct_url)
 
-# Verify ECS EC2s are being scraped as Node Exporter targets
-curl "$(terraform output -raw prometheus_direct_url)/api/v1/targets" | jq '.data.activeTargets[].labels'
-```
+- Scrapes Node Exporter on each ECS EC2 host via `file_sd_configs`; target list written to `/etc/prometheus/targets/ecs_nodes.json` by a cron job that calls `aws ec2 describe-instances --filters Name=tag:AmazonECSManaged,Values=true` every 5 minutes
+- Scrape interval: 15s
+- Retention: 15 days (`--storage.tsdb.retention.time=15d`)
+- Alert rules (Prometheus-native):
+  - `DiskAlmostFull` — `node_filesystem_avail_bytes / node_filesystem_size_bytes{mountpoint="/"} < 0.15` for 5 min (disk > 85% full)
+  - `HighMemory` — `node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes < 0.20` for 5 min (memory < 20% free)
+  - `NodeDown` — `up{job="node_exporter"} == 0` for 1 min (Node Exporter target unreachable)
 
-### Node Exporter (on ECS EC2 hosts)
-```bash
-# Discover ECS EC2 IPs
-aws ec2 describe-instances \
-  --filters "Name=tag:AmazonECSManaged,Values=true" "Name=instance-state-name,Values=running" \
-  --region us-east-1 \
-  --query "Reservations[].Instances[].PrivateIpAddress"
+### Grafana
 
-# Test Node Exporter directly (requires VPN or SSM port forwarding)
-curl http://<private-ip>:9100/metrics | grep node_cpu
-```
+- Dashboard: **WordPress ECS HA — SRE Overview**, 19 panels across 5 sections: ECS Cluster, ALB, Host Metrics, RDS Database, SLO Status
+- Datasources: Prometheus (`PBFA97CFB590B2093`) and CloudWatch (`P034F075C744B399F`)
+- Access: `http://wordpress-ecs-ha-dev-alb-1325349632.us-east-1.elb.amazonaws.com/grafana` — login `admin` / `grafana_admin_password`
+- Dashboard is provisioned automatically: `user_data.sh.tpl` downloads `wordpress-overview.json` from S3 to `/opt/monitoring/grafana/dashboards/` at EC2 boot; Grafana reloads the file every 30 seconds with no container restart required
 
-### SSM Access to Monitoring EC2
-```bash
-INSTANCE_ID=$(aws ec2 describe-instances \
-  --filters "Name=tag:Role,Values=monitoring" "Name=instance-state-name,Values=running" \
-  --region us-east-1 \
-  --query "Reservations[0].Instances[0].InstanceId" --output text)
+### CloudWatch
 
-aws ssm start-session --target $INSTANCE_ID --region us-east-1
-```
+- `wordpress-ecs-ha-dev-ecs-high-cpu` — ECS CPU > 70% for 10 min (2 × 5-min periods)
+- `wordpress-ecs-ha-dev-ecs-high-memory` — ECS Memory > 75% for 10 min (2 × 5-min periods)
+- `wordpress-ecs-ha-dev-ecs-low-task-count` — Running tasks < 2 for 1 min
+- `wordpress-ecs-ha-dev-alb-5xx` — 5xx error rate > 0.5% for 2 min (metric math: `e1/r1*100`)
+- `wordpress-ecs-ha-dev-alb-unhealthy-hosts` — Unhealthy ALB targets ≥ 1 for 2 min
+- `wordpress-ecs-ha-dev-alb-traffic-drop` — Request count < 5/min for 3 consecutive minutes
+- `wordpress-ecs-ha-dev-rds-high-cpu` — RDS CPU > 70% for 15 min (3 × 5-min periods)
+- `wordpress-ecs-ha-dev-rds-low-storage` — RDS free storage < 2 GB
+- `wordpress-ecs-ha-dev-rds-high-connections` — DB connections > 60 for 10 min (70% of max_connections)
+- `wordpress-ecs-ha-dev-grafana-unhealthy` — Grafana ALB target unhealthy ≥ 1 for 2 min
+- Composite alarm: `wordpress-ecs-ha-dev-service-degraded` — fires when `ALARM(ecs-low-task-count) AND ALARM(alb-unhealthy-hosts)` are both true simultaneously
+- SNS topic: `wordpress-ecs-ha-dev-alerts`; subscriber: `daniyal.tufail@xgrid.co`
 
 ---
 
-## 8. Daily Reliability Report
+## 9. Daily Reliability Report
 
-**Dry run (stdout, no email):**
+- Collects: ECS running task count and cluster state, EC2 CPU/memory/disk usage via Prometheus, ALB request rate and 5xx/4xx error counts, RDS CPU/connections/free storage, CloudWatch alarm history, CloudWatch Logs error patterns (`?ERROR ?Fatal ?error`) from `/ecs/wordpress-ecs-ha/dev/wordpress`
+- SLO checks: SLO-1 (HTTP Availability ≥ 99.5%), SLO-2 (p95 Latency ≤ 2.0s), SLO-3 (Running Tasks ≥ 1), SLO-4 (RDS Storage > 5.0 GB)
+- Schedule: daily at 06:00 UTC (11:00 AM PKT) via cron on the monitoring EC2
+- Manual dry-run:
+
 ```bash
-python3 scripts/daily-reliability-report.py \
+python3 /opt/monitoring/scripts/daily-reliability-report.py \
   --cluster wordpress-ecs-ha-dev-cluster \
-  --rds-identifier wordpress-ecs-ha-dev-mysql \
-  --alb-arn-suffix "$(terraform -chdir=environments/dev output -raw alb_arn_suffix)" \
-  --tg-arn-suffix "$(terraform -chdir=environments/dev output -raw target_group_arn_suffix)" \
+  --service wordpress-ecs-ha-dev-wordpress-svc \
+  --rds-identifier terraform-2026052004531822060000000b \
+  --alb-arn-suffix app/wordpress-ecs-ha-dev-alb/355411d356f09837 \
+  --prometheus-url http://localhost:9090 \
   --region us-east-1 \
-  --prometheus-url "$(terraform -chdir=environments/dev output -raw prometheus_direct_url)" \
   --dry-run
 ```
 
-**Send email via Gmail SMTP:**
-```bash
-export SMTP_USER="yourname@gmail.com"
-export SMTP_PASSWORD="xxxx-xxxx-xxxx-xxxx"  # Gmail App Password
-export REPORT_TO="recipient@example.com"
+---
 
-python3 scripts/daily-reliability-report.py \
-  --cluster wordpress-ecs-ha-dev-cluster \
-  --rds-identifier wordpress-ecs-ha-dev-mysql \
-  --alb-arn-suffix <suffix> \
-  --tg-arn-suffix <suffix>
+## 10. Alerting
+
+All ten CloudWatch alarms publish to a single SNS topic. Email delivery occurs within 2–3 minutes of the alarm evaluation window completing; alarms evaluate on their own schedule independent of Grafana's dashboard refresh.
+
+```
+CloudWatch Alarm fires
+        ↓
+SNS Topic: wordpress-ecs-ha-dev-alerts
+        ↓
+Email: daniyal.tufail@xgrid.co
 ```
 
-Create a Gmail App Password at [myaccount.google.com/apppasswords](https://myaccount.google.com/apppasswords).
-
-The report automatically runs at 06:00 UTC daily on the monitoring EC2 via cron. Output is logged to `/var/log/daily-report.log`.
+Note: CloudWatch metrics have a 2–3 minute ingestion delay. Alarms are the detection mechanism; Grafana is for investigation after an alarm fires.
 
 ---
 
-## 9. Failure Injection Tests
+## 11. Security Notes
 
-### Test 1: Kill One ECS Task (HA Recovery)
-```bash
-TASK=$(aws ecs list-tasks \
-  --cluster wordpress-ecs-ha-dev-cluster \
-  --region us-east-1 --query "taskArns[0]" --output text)
-
-aws ecs stop-task --cluster wordpress-ecs-ha-dev-cluster --task $TASK \
-  --reason "HA Failure Injection Test" --region us-east-1
-
-watch -n 5 "aws ecs describe-services \
-  --cluster wordpress-ecs-ha-dev-cluster \
-  --services wordpress-ecs-ha-dev-wordpress-svc \
-  --region us-east-1 \
-  --query 'services[0].{Running:runningCount,Desired:desiredCount}' --output table"
-```
-**Expected:** Grafana "Running Tasks" drops 2→1, ECS scheduler replaces it within ~60s, task count returns to 2. WordPress remains accessible throughout.
-
-### Test 2: Kill Both Tasks (Service Degraded)
-Stop both tasks within 30 seconds. Expected: composite alarm fires, Grafana shows 0 running tasks, WordPress returns 503.
-
-### Test 3: Stop Monitoring EC2
-```bash
-aws ec2 stop-instances --instance-ids <monitoring-ec2-id> --region us-east-1
-```
-**Expected:** `grafana-unhealthy` alarm fires within 2 minutes. WordPress is completely unaffected — monitoring is isolated.
+- DB credentials stored in Secrets Manager (`wordpress-ecs-ha/dev/db-credentials`) — not in environment variables or task definition plaintext; ECS retrieves them at container start via the `secrets:` block in the task definition
+- KMS CMK (`alias/wordpress-ecs-ha-dev-secrets`) with automatic key rotation encrypts EFS, RDS storage, and Secrets Manager; `kms:ViaService` conditions restrict key usage to those two services only
+- ECS exec command disabled: `enable_execute_command = false` in the ECS service definition
+- No SSH keys on any EC2; all access is via SSM Session Manager using the `AmazonSSMManagedInstanceCore` managed policy
+- `terraform.tfvars` is listed in `.gitignore` and is never committed; it contains `grafana_admin_password`
+- RDS `deletion_protection = false` (dev only — set `true` for staging and production); `skip_final_snapshot = false` (a final snapshot named `wordpress-ecs-ha-dev-final` is created automatically on `terraform destroy`)
 
 ---
 
-## 10. Troubleshooting
+## 12. Known Limitations
 
-### Prometheus targets are DOWN
+- CloudWatch metric ingestion delay is 2–3 minutes. Grafana dashboards reflect data that is already 2–3 minutes old. Do not rely on Grafana for real-time incident detection — alarms are the detection mechanism.
+- The monitoring EC2 has a public IP address for direct Prometheus access on port 9090. This is acceptable for dev and internship use; in production, Prometheus should sit behind a VPN or a more restrictive security group.
+- The SNS email subscription must be manually confirmed after `terraform apply` by clicking the link in the AWS confirmation email. Terraform cannot automate this step due to AWS provider 5.x issue #32072.
+- `t2.micro` instances are used for both ECS EC2 hosts and the monitoring EC2. These are suitable for dev and internship load testing; not appropriate for production traffic levels.
+- A single NAT Gateway is provisioned in one AZ to minimize cost. This creates an AZ dependency: if that AZ degrades, ECS tasks in the other AZ lose outbound internet access. Use two NAT Gateways in production.
+
+---
+
+## 13. Teardown
+
 ```bash
-# SSM into monitoring EC2
-aws ssm start-session --target <monitoring-ec2-id> --region us-east-1
+# WARNING: This destroys all infrastructure including RDS data
+# Ensure you have a manual RDS snapshot before running
 
-# Check discovery output
-cat /opt/monitoring/prometheus/targets/ecs_nodes.json
-
-# Re-run discovery manually
-/opt/monitoring/scripts/discover_ecs_nodes.sh
-
-# Check Prometheus logs
-docker compose -f /opt/monitoring/docker-compose.yml logs prometheus --tail 30
-```
-
-**Cause:** ECS EC2 instances may not have the `AmazonECSManaged=true` tag set yet (AL2023 may use different tags). Verify:
-```bash
-aws ec2 describe-instances \
-  --filters "Name=tag:AmazonECSManaged,Values=true" "Name=instance-state-name,Values=running" \
-  --region us-east-1 --query "Reservations[].Instances[].InstanceId"
-```
-
-### Grafana shows "No data" for CloudWatch panels
-The monitoring EC2 IAM role must have CloudWatch read permissions. Verify:
-```bash
-aws iam list-attached-role-policies \
-  --role-name wordpress-ecs-ha-dev-monitoring-<suffix> \
+# Take RDS snapshot first
+aws rds create-db-snapshot \
+  --db-instance-identifier terraform-2026052004531822060000000b \
+  --db-snapshot-identifier week5-manual-snapshot-$(date +%Y%m%d) \
   --region us-east-1
-```
 
-### Docker Compose did not start (monitoring EC2 just launched)
-user_data runs asynchronously after launch. Wait 5 minutes, then:
-```bash
-aws ssm start-session --target <instance-id> --region us-east-1
-# Check:
-cat /var/log/monitoring-bootstrap.log
-docker ps
-```
-
-### WordPress health check failing after Week 5 apply
-The ALB now has a path-pattern listener rule for `/grafana` at priority 10. The WordPress default forward remains. If health checks suddenly fail, verify the ALB listener rules:
-```bash
-aws elbv2 describe-rules \
-  --listener-arn $(terraform -chdir=environments/dev output -raw alb_listener_arn 2>/dev/null || echo "check outputs") \
-  --region us-east-1
+# Then destroy
+terraform destroy -var 'grafana_admin_password=YOUR_PASSWORD'
 ```
 
 ---
 
-## 11. Cost Analysis
+## 14. Documentation
 
-| Service | Config | Free Tier | Monthly Cost |
-|---------|--------|-----------|-------------|
-| NAT Gateway | 1× Base + 1 GB data | None | $32.85 |
-| ALB | 1× + 2 target groups | None | ~$22.27 |
-| EC2 WordPress (×2) | t2.micro | 1 instance free | $8.47 |
-| EC2 Monitoring (×1) | t2.micro | (used above) | $8.47 |
-| RDS MySQL | db.t3.micro | None | $12.41 |
-| EFS | 1 GB storage | 5 GB free | $0.30 |
-| Secrets Manager | 1 secret | None | $0.40 |
-| KMS CMK | 1 key | None | $1.00 |
-| CloudWatch | Dashboard + alarms | 10 free | $5.00 |
-| Prometheus + Grafana | Docker (no extra AWS service) | N/A | $0.00 |
-| **TOTAL** | | | **~$91.17** |
-
-Week 5 adds ~$8.47/month vs Week 3 for the dedicated monitoring EC2. Prometheus and Grafana run as Docker containers — zero additional AWS cost.
-
----
-
-## 12. Teardown
-
-> The NAT Gateway and ALB accrue hourly charges. Always destroy when done testing.
-
-```bash
-cd environments/dev
-terraform destroy
-```
-
-Verify complete cleanup:
-```bash
-aws ecs list-clusters --region us-east-1
-aws rds describe-db-instances --region us-east-1
-aws elbv2 describe-load-balancers --region us-east-1
-aws ec2 describe-instances \
-  --filters "Name=instance-state-name,Values=running" \
-  --query "Reservations[].Instances[].{ID:InstanceId,Type:InstanceType,Name:Tags[?Key=='Name']|[0].Value}" \
-  --region us-east-1 --output table
-```
-
-Manual cleanup required:
-- S3 state bucket (`wordpress-ecs-tfstate-xgrid-*`)
-- CloudWatch log groups (`/ecs/...` and `/monitoring/...`)
+- [docs/runbook.md](docs/runbook.md) — Alert playbooks for all 14 alarms
+- [docs/slo-definitions.md](docs/slo-definitions.md) — SLO targets and error budget policy
+- [docs/escalation-flow.md](docs/escalation-flow.md) — Severity definitions and escalation matrix
+- [docs/incident-template.md](docs/incident-template.md) — Post-mortem template
+- [dashboards/wordpress-overview.json](dashboards/wordpress-overview.json) — Grafana dashboard (auto-provisioned)
