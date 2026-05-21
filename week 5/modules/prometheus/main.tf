@@ -248,3 +248,4 @@ resource "aws_lb_target_group_attachment" "grafana" {
   target_id        = aws_instance.monitoring.id
   port             = 3000
 }
+

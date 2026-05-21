@@ -184,15 +184,7 @@ Successful test proves the scheduler maintains availability: `Running: 2 â†’ 1 â
     ```
 *   **Fix:** Confirm the `host` field in the secret matches the current RDS endpoint. Re-run `terraform apply` to refresh secret values.
 
-### SNS Emails Not Arriving
-*   **Diagnosis:**
-    ```bash
-    aws sns list-subscriptions-by-topic \
-      --topic-arn $(aws sns list-topics --region us-east-1 --query "Topics[?contains(TopicArn,'wordpress-ecs-ha-dev')].TopicArn" --output text) \
-      --region us-east-1 \
-      --query "Subscriptions[0].{Status:SubscriptionArn,Email:Endpoint}" --output table
-    ```
-*   **Fix:** Confirm the subscription is not in `PendingConfirmation`. Check spam filters for AWS notification emails.
+
 
 ### Terraform Apply Failures
 *   **Diagnosis:** Review CLI error output.

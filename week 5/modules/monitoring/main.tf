@@ -9,27 +9,19 @@ resource "aws_sns_topic" "wordpress_alerts" {
   }
 }
 
-# Email subscription for alarm notifications with Gmail protection.
-# BEST PRACTICE: 
-# 1. Protocol = "email-json": JSON format resists automated scanning
-# 2. AuthenticateOnUnsubscribe = "true": Set via AWS CLI (managed separately, see setup script)
-# 3. lifecycle ignore_changes: Prevents Terraform from recreating after initial confirmation
-# 
-# This combination solves the Gmail auto-unsubscribe problem where Gmail's security scanner
-# automatically clicks the unsubscribe link in confirmation emails.
-# 
-# NOTE: The AuthenticateOnUnsubscribe attribute is set via the setup script after creation.
-# To disable subscription management: set manage_email_subscription = false
-resource "aws_sns_topic_subscription" "email" {
-  count     = var.manage_email_subscription ? 1 : 0
-  topic_arn = aws_sns_topic.wordpress_alerts.arn
-  protocol  = "email-json"
-  endpoint  = var.alert_email
-
-  lifecycle {
-    ignore_changes = all
-  }
-}
+# Email subscription is intentionally NOT managed by Terraform.
+# Reason: AWS provider 5.x bug (#32072) — filter_policy_scope is injected at plan time
+# before the topic ARN is known, causing "filter_policy is required" validation errors
+# on fresh applies. Email subscriptions also require manual confirmation, so Terraform
+# cannot fully automate them anyway.
+#
+# After terraform apply completes, create the subscription via CLI:
+#   aws sns subscribe \
+#     --topic-arn $(terraform output -raw sns_topic_arn) \
+#     --protocol email-json \
+#     --notification-endpoint YOUR_EMAIL \
+#     --region us-east-1
+# Then check your inbox and click the confirmation link.
 
 # CloudWatch alarms monitoring ECS performance and availability metrics.
 resource "aws_cloudwatch_metric_alarm" "ecs_high_cpu" {
@@ -40,8 +32,9 @@ resource "aws_cloudwatch_metric_alarm" "ecs_high_cpu" {
   namespace           = "AWS/ECS"
   period              = 300
   statistic           = "Average"
-  threshold           = 80
-  alarm_description   = "ECS WordPress service CPU above 80% for 10 minutes"
+  threshold           = 70
+  alarm_description  = "ECS WordPress service CPU above 70% for 10 minutes (warning — time to investigate)"
+  treat_missing_data = "breaching"
 
   dimensions = {
     ClusterName = var.cluster_name
@@ -60,8 +53,9 @@ resource "aws_cloudwatch_metric_alarm" "ecs_high_memory" {
   namespace           = "AWS/ECS"
   period              = 300
   statistic           = "Average"
-  threshold           = 80
-  alarm_description   = "ECS WordPress service memory above 80% for 10 minutes"
+  threshold           = 75
+  alarm_description   = "ECS WordPress service memory above 75% for 10 minutes (warning — time to investigate)"
+  treat_missing_data  = "breaching"
 
   dimensions = {
     ClusterName = var.cluster_name
@@ -121,7 +115,7 @@ resource "aws_cloudwatch_dashboard" "wordpress" {
           ]
           period = 300
           stat   = "Average"
-          region = "us-east-1"
+          region = var.aws_region
           title  = "ECS CPU %"
         }
       },
@@ -137,7 +131,7 @@ resource "aws_cloudwatch_dashboard" "wordpress" {
           ]
           period = 300
           stat   = "Average"
-          region = "us-east-1"
+          region = var.aws_region
           title  = "ECS Memory %"
         }
       },
@@ -153,7 +147,7 @@ resource "aws_cloudwatch_dashboard" "wordpress" {
           ]
           period = 60
           stat   = "Average"
-          region = "us-east-1"
+          region = var.aws_region
           title  = "Running Tasks"
           view   = "singleValue"
         }
@@ -170,7 +164,7 @@ resource "aws_cloudwatch_dashboard" "wordpress" {
           ]
           period = 60
           stat   = "Sum"
-          region = "us-east-1"
+          region = var.aws_region
           title  = "ALB Requests/min"
         }
       },
@@ -186,7 +180,7 @@ resource "aws_cloudwatch_dashboard" "wordpress" {
           ]
           period = 60
           stat   = "Sum"
-          region = "us-east-1"
+          region = var.aws_region
           title  = "5XX Errors"
         }
       },
@@ -202,7 +196,7 @@ resource "aws_cloudwatch_dashboard" "wordpress" {
           ]
           period = 60
           stat   = "Average"
-          region = "us-east-1"
+          region = var.aws_region
           title  = "Response Time (s)"
         }
       },
@@ -218,7 +212,7 @@ resource "aws_cloudwatch_dashboard" "wordpress" {
           ]
           period = 60
           stat   = "Average"
-          region = "us-east-1"
+          region = var.aws_region
           title  = "Unhealthy Host Count"
         }
       },
@@ -234,7 +228,7 @@ resource "aws_cloudwatch_dashboard" "wordpress" {
           ]
           period = 300
           stat   = "Average"
-          region = "us-east-1"
+          region = var.aws_region
           title  = "RDS CPU %"
         }
       },
@@ -250,7 +244,7 @@ resource "aws_cloudwatch_dashboard" "wordpress" {
           ]
           period = 300
           stat   = "Average"
-          region = "us-east-1"
+          region = var.aws_region
           title  = "DB Connections"
         }
       },
@@ -266,7 +260,7 @@ resource "aws_cloudwatch_dashboard" "wordpress" {
           ]
           period = 300
           stat   = "Minimum"
-          region = "us-east-1"
+          region = var.aws_region
           title  = "RDS Free Storage (bytes) - Minimum"
         }
       }

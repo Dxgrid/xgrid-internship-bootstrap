@@ -18,7 +18,7 @@ chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
 
 # ── Install Python 3, pip, boto3 for the daily report script ─────────────────
 yum install -y python3 python3-pip jq
-pip3 install boto3 requests
+pip3 install boto3 requests "urllib3<2.0"
 
 # ── Create directory structure ────────────────────────────────────────────────
 mkdir -p /opt/monitoring/prometheus/data

@@ -272,6 +272,43 @@ def collect_alarm_states(region: str, project_prefix: str):
     return {"counts": counts, "active": active_alarms}
 
 
+# ─── Section 8: CloudWatch Logs Summary ──────────────────────────────────────
+
+def collect_log_summary(region: str, log_group: str, start, end):
+    logs = boto3.client("logs", region_name=region)
+
+    start_ms = int(start.timestamp() * 1000)
+    end_ms   = int(end.timestamp() * 1000)
+
+    error_count = 0
+    samples     = []
+
+    try:
+        paginator = logs.get_paginator("filter_log_events")
+        pages = paginator.paginate(
+            logGroupName=log_group,
+            startTime=start_ms,
+            endTime=end_ms,
+            filterPattern="?ERROR ?Fatal ?error",
+            PaginationConfig={"MaxItems": 200},
+        )
+        for page in pages:
+            for event in page.get("events", []):
+                error_count += 1
+                if len(samples) < 3:
+                    ts  = datetime.fromtimestamp(event["timestamp"] / 1000, tz=timezone.utc)
+                    msg = event["message"].strip()[:120]
+                    samples.append(f"  [{ts.strftime('%H:%M UTC')}] {msg}")
+    except Exception as e:
+        return {"error": str(e), "count": 0, "samples": [], "log_group": log_group}
+
+    return {
+        "log_group": log_group,
+        "count":     error_count,
+        "samples":   samples,
+    }
+
+
 # ─── SLO Evaluation ──────────────────────────────────────────────────────────
 
 def evaluate_slos(ecs, alb, rds):
@@ -325,7 +362,7 @@ def evaluate_slos(ecs, alb, rds):
 
 # ─── Report Formatting ────────────────────────────────────────────────────────
 
-def format_report(date_str, ecs, ec2_instances, host_metrics, alb, rds, alarms, slos):
+def format_report(date_str, ecs, ec2_instances, host_metrics, alb, rds, alarms, slos, log_summary=None, grafana_url="http://<alb-dns>/grafana"):
     passed    = sum(1 for s in slos if s["pass"] is True)
     failed    = sum(1 for s in slos if s["pass"] is False)
     overall   = "CRITICAL" if alarms["counts"].get("ALARM", 0) > 0 or failed > 0 else \
@@ -393,6 +430,28 @@ def format_report(date_str, ecs, ec2_instances, host_metrics, alb, rds, alarms, 
         + ("  ✓" if rds.get("free_storage_gb", 0) > SLO_RDS_MIN_STORAGE_GB else "  ✗ SLO BREACH"),
         "",
         "=" * 60,
+        "LOGS SUMMARY (last 24h)",
+        "=" * 60,
+    ]
+
+    if log_summary and not log_summary.get("error"):
+        lines += [
+            f"Log Group      : {log_summary['log_group']}",
+            f"Total Errors   : {log_summary['count']}",
+        ]
+        if log_summary["samples"]:
+            lines.append("Recent Samples :")
+            lines.extend(log_summary["samples"])
+        else:
+            lines.append("Recent Samples : None — no errors in the last 24h")
+    elif log_summary and log_summary.get("error"):
+        lines.append(f"Error fetching logs: {log_summary['error']}")
+    else:
+        lines.append("Log summary not collected.")
+
+    lines += [
+        "",
+        "=" * 60,
         "CLOUDWATCH ALARM STATUS",
         "=" * 60,
         f"ALARM           : {alarms['counts'].get('ALARM', 0)}",
@@ -425,7 +484,7 @@ def format_report(date_str, ecs, ec2_instances, host_metrics, alb, rds, alarms, 
         "─" * 60,
         "",
         "This report was generated automatically by the Week 5 SRE Observability Platform.",
-        "For dashboards, open Grafana at: http://<alb-dns>/grafana",
+        f"For dashboards, open Grafana at: {grafana_url}",
     ]
 
     return "\n".join(lines)
@@ -472,6 +531,8 @@ def main():
     parser.add_argument("--region",         default="us-east-1", help="AWS region")
     parser.add_argument("--prometheus-url", default="http://localhost:9090", help="Prometheus base URL")
     parser.add_argument("--sns-topic-arn",  help="SNS topic ARN for email delivery (if not provided, uses --dry-run)")
+    parser.add_argument("--grafana-url",    default="http://wordpress-ecs-ha-dev-alb-1325349632.us-east-1.elb.amazonaws.com/grafana",
+                        help="Grafana dashboard URL to include in report footer")
     parser.add_argument("--dry-run",        action="store_true", help="Print report to stdout; do not publish to SNS")
     args = parser.parse_args()
 
@@ -486,9 +547,11 @@ def main():
     alb_data      = collect_alb_metrics(args.alb_arn_suffix, args.tg_arn_suffix, args.region, start, end)
     rds_data      = collect_rds_metrics(args.rds_identifier, args.region, start, end)
     alarm_data    = collect_alarm_states(args.region, project_prefix="wordpress-ecs-ha")
+    log_data      = collect_log_summary(args.region, "/ecs/wordpress-ecs-ha/dev/wordpress", start, end)
     slos          = evaluate_slos(ecs_data, alb_data, rds_data)
 
-    report = format_report(date_str, ecs_data, ec2_data, host_data, alb_data, rds_data, alarm_data, slos)
+    report = format_report(date_str, ecs_data, ec2_data, host_data, alb_data, rds_data, alarm_data, slos,
+                           log_summary=log_data, grafana_url=args.grafana_url)
 
     if args.dry_run or not args.sns_topic_arn:
         print(report)
