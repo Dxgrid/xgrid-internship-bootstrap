@@ -1,5 +1,5 @@
 # SNS topic for centralized alerting across RDS, ALB, and ECS services.
-resource "aws_sns_topic" "wordpress_alerts" {
+resource "aws_sns_topic" "alerts" {
   name = "${var.project_name}-${var.environment}-alerts"
 
   tags = {
@@ -9,6 +9,14 @@ resource "aws_sns_topic" "wordpress_alerts" {
   }
 }
 
+# Email subscription — set manage_email_subscription=false after the confirmation
+# email is clicked, to prevent Terraform from recreating it on every apply.
+resource "aws_sns_topic_subscription" "email" {
+  count     = var.manage_email_subscription ? 1 : 0
+  topic_arn = aws_sns_topic.alerts.arn
+  protocol  = "email"
+  endpoint  = var.alert_email
+}
 
 
 # CloudWatch alarms monitoring ECS performance and availability metrics.
@@ -21,7 +29,7 @@ resource "aws_cloudwatch_metric_alarm" "ecs_high_cpu" {
   period              = 300
   statistic           = "Average"
   threshold           = 70
-  alarm_description  = "ECS WordPress service CPU above 70% for 10 minutes (warning — time to investigate)"
+  alarm_description  = "ECS demo-app service CPU above 70% for 10 minutes (warning — time to investigate)"
   treat_missing_data = "breaching"
 
   dimensions = {
@@ -29,8 +37,8 @@ resource "aws_cloudwatch_metric_alarm" "ecs_high_cpu" {
     ServiceName = var.service_name
   }
 
-  alarm_actions = [aws_sns_topic.wordpress_alerts.arn]
-  ok_actions    = [aws_sns_topic.wordpress_alerts.arn]
+  alarm_actions = [aws_sns_topic.alerts.arn]
+  ok_actions    = [aws_sns_topic.alerts.arn]
 }
 
 resource "aws_cloudwatch_metric_alarm" "ecs_high_memory" {
@@ -42,7 +50,7 @@ resource "aws_cloudwatch_metric_alarm" "ecs_high_memory" {
   period              = 300
   statistic           = "Average"
   threshold           = 75
-  alarm_description   = "ECS WordPress service memory above 75% for 10 minutes (warning — time to investigate)"
+  alarm_description   = "ECS demo-app service memory above 75% for 10 minutes (warning — time to investigate)"
   treat_missing_data  = "breaching"
 
   dimensions = {
@@ -50,14 +58,14 @@ resource "aws_cloudwatch_metric_alarm" "ecs_high_memory" {
     ServiceName = var.service_name
   }
 
-  alarm_actions = [aws_sns_topic.wordpress_alerts.arn]
-  ok_actions    = [aws_sns_topic.wordpress_alerts.arn]
+  alarm_actions = [aws_sns_topic.alerts.arn]
+  ok_actions    = [aws_sns_topic.alerts.arn]
 }
 
 resource "aws_cloudwatch_metric_alarm" "ecs_low_task_count" {
   alarm_name          = "${var.project_name}-${var.environment}-ecs-low-task-count"
   comparison_operator = "LessThanThreshold"
-  evaluation_periods  = 1
+  evaluation_periods  = 2
   metric_name         = "RunningTaskCount"
   namespace           = "ECS/ContainerInsights"
   period              = 60
@@ -71,22 +79,22 @@ resource "aws_cloudwatch_metric_alarm" "ecs_low_task_count" {
     ServiceName = var.service_name
   }
 
-  alarm_actions = [aws_sns_topic.wordpress_alerts.arn]
-  ok_actions    = [aws_sns_topic.wordpress_alerts.arn]
+  alarm_actions = [aws_sns_topic.alerts.arn]
+  ok_actions    = [aws_sns_topic.alerts.arn]
 }
 
 # Composite alarm combining task count and ALB health checks to confirm a critical service outage.
-resource "aws_cloudwatch_composite_alarm" "wordpress_service_degraded" {
+resource "aws_cloudwatch_composite_alarm" "service_degraded" {
   alarm_name        = "${var.project_name}-${var.environment}-service-degraded"
   alarm_description = "ECS task count and ALB health checks failing; service completely down."
 
   alarm_rule = "ALARM(${aws_cloudwatch_metric_alarm.ecs_low_task_count.alarm_name}) AND ALARM(${var.alb_unhealthy_hosts_alarm_name})"
 
-  alarm_actions = [aws_sns_topic.wordpress_alerts.arn]
+  alarm_actions = [aws_sns_topic.alerts.arn]
 }
 
 # Unified CloudWatch dashboard providing visibility into ECS, ALB, and RDS metrics.
-resource "aws_cloudwatch_dashboard" "wordpress" {
+resource "aws_cloudwatch_dashboard" "main" {
   dashboard_name = "${var.project_name}-${var.environment}-dashboard"
 
   dashboard_body = jsonencode({

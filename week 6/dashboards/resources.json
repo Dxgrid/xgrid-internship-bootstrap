@@ -1,0 +1,298 @@
+{
+  "title": "Flask SRE — Resource Usage",
+  "uid": "flask-sre-resources",
+  "description": "Answer 'how loaded is the infrastructure?' — host and ECS-level resource utilisation.",
+  "tags": ["flask-sre", "resources", "week6"],
+  "schemaVersion": 39,
+  "version": 5,
+  "refresh": "1m",
+  "time": { "from": "now-3h", "to": "now" },
+  "timepicker": {},
+  "timezone": "browser",
+  "editable": true,
+  "graphTooltip": 1,
+  "templating": {
+    "list": [
+      {
+        "name": "job",
+        "label": "Job",
+        "type": "query",
+        "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+        "query": "label_values(up, job)",
+        "current": { "text": "node_exporter", "value": "node_exporter" },
+        "hide": 0,
+        "includeAll": false,
+        "multi": false,
+        "refresh": 2,
+        "sort": 1
+      },
+      {
+        "name": "instance",
+        "label": "Instance",
+        "type": "query",
+        "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+        "query": "label_values(up{job=\"$job\"}, instance)",
+        "current": {},
+        "hide": 0,
+        "includeAll": true,
+        "multi": true,
+        "refresh": 2,
+        "sort": 1
+      }
+    ]
+  },
+  "annotations": { "list": [] },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Host CPU % (per instance)",
+      "description": "CPU utilisation per EC2 host running ECS tasks. Above 80% for 3 minutes triggers HighCPU alert. Uses pre-computed recording rule.",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+      "gridPos": { "x": 0, "y": 0, "w": 12, "h": 8 },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+          "expr": "instance:node_cpu_utilisation:rate5m",
+          "legendFormat": "{{ instance }}",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "tooltip": { "mode": "multi", "sort": "none" },
+        "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "max": 100,
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 15,
+            "gradientMode": "opacity",
+            "thresholdsStyle": { "mode": "line" },
+            "spanNulls": false,
+            "showPoints": "never",
+            "lineInterpolation": "linear"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 70 },
+              { "color": "red", "value": 80 }
+            ]
+          },
+          "color": { "mode": "palette-classic" }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 2,
+      "title": "Host Memory % (per instance)",
+      "description": "Memory utilisation per EC2 host. Above 80% for 5 minutes triggers HighMemory alert. Uses pre-computed recording rule.",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+      "gridPos": { "x": 12, "y": 0, "w": 12, "h": 8 },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+          "expr": "clamp_min(instance:node_memory_utilisation:ratio * 100, 0)",
+          "legendFormat": "{{ instance }}",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "tooltip": { "mode": "multi", "sort": "none" },
+        "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "max": 100,
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 15,
+            "gradientMode": "opacity",
+            "thresholdsStyle": { "mode": "line" },
+            "spanNulls": false,
+            "showPoints": "never",
+            "lineInterpolation": "linear"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 70 },
+              { "color": "red", "value": 85 }
+            ]
+          },
+          "color": { "mode": "palette-classic" }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 3,
+      "title": "Disk Usage % (root partition)",
+      "description": "Root filesystem usage per host. Above 85% for 5 minutes triggers DiskAlmostFull alert. tmpfs and overlay mounts excluded.",
+      "type": "gauge",
+      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+      "gridPos": { "x": 0, "y": 8, "w": 8, "h": 8 },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+          "expr": "clamp_min(instance:node_filesystem_utilisation:ratio * 100, 0)",
+          "legendFormat": "{{ instance }}",
+          "refId": "A",
+          "instant": true
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "calcs": ["lastNotNull"],
+          "fields": "",
+          "values": false
+        },
+        "orientation": "auto",
+        "showThresholdLabels": false,
+        "showThresholdMarkers": true,
+        "minVizWidth": 75,
+        "minVizHeight": 75
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "max": 100,
+          "decimals": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 70 },
+              { "color": "red", "value": 85 }
+            ]
+          },
+          "color": { "mode": "thresholds" }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 4,
+      "title": "ECS Service CPU %",
+      "description": "CPU utilisation of the demo-app ECS service as reported by CloudWatch. Above 80% may indicate the service needs scaling.",
+      "type": "timeseries",
+      "datasource": { "type": "cloudwatch", "uid": "P034F075C744B399F" },
+      "gridPos": { "x": 8, "y": 8, "w": 8, "h": 8 },
+      "targets": [
+        {
+          "datasource": { "type": "cloudwatch", "uid": "P034F075C744B399F" },
+          "queryMode": "Metrics",
+          "metricQueryType": 0,
+          "metricEditorMode": 0,
+          "region": "default",
+          "namespace": "AWS/ECS",
+          "metricName": "CPUUtilization",
+          "dimensions": {
+            "ClusterName": "flask-sre-ecs-dev-cluster",
+            "ServiceName": "flask-sre-ecs-dev-demo-app-svc"
+          },
+          "matchExact": true,
+          "statistic": "Average",
+          "period": "300",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "tooltip": { "mode": "single", "sort": "none" },
+        "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 15,
+            "gradientMode": "opacity",
+            "thresholdsStyle": { "mode": "line" },
+            "spanNulls": false,
+            "showPoints": "never",
+            "lineInterpolation": "linear"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 70 },
+              { "color": "red", "value": 80 }
+            ]
+          },
+          "color": { "mode": "palette-classic" }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 5,
+      "title": "ECS Service Memory %",
+      "description": "Memory utilisation of the demo-app ECS service as reported by CloudWatch. Sustained high memory may indicate a memory leak.",
+      "type": "timeseries",
+      "datasource": { "type": "cloudwatch", "uid": "P034F075C744B399F" },
+      "gridPos": { "x": 16, "y": 8, "w": 8, "h": 8 },
+      "targets": [
+        {
+          "datasource": { "type": "cloudwatch", "uid": "P034F075C744B399F" },
+          "queryMode": "Metrics",
+          "metricQueryType": 0,
+          "metricEditorMode": 0,
+          "region": "default",
+          "namespace": "AWS/ECS",
+          "metricName": "MemoryUtilization",
+          "dimensions": {
+            "ClusterName": "flask-sre-ecs-dev-cluster",
+            "ServiceName": "flask-sre-ecs-dev-demo-app-svc"
+          },
+          "matchExact": true,
+          "statistic": "Average",
+          "period": "300",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "tooltip": { "mode": "single", "sort": "none" },
+        "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 15,
+            "gradientMode": "opacity",
+            "thresholdsStyle": { "mode": "line" },
+            "spanNulls": false,
+            "showPoints": "never",
+            "lineInterpolation": "linear"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 70 },
+              { "color": "red", "value": 80 }
+            ]
+          },
+          "color": { "mode": "palette-classic" }
+        },
+        "overrides": []
+      }
+    }
+  ]
+}

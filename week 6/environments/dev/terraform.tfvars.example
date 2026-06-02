@@ -1,0 +1,16 @@
+aws_region   = "us-east-1"
+environment  = "dev"
+project_name = "flask-sre-ecs"
+alert_email  = "you@example.com"
+
+# Grafana admin UI password
+grafana_admin_password = "change-me-before-deploy"
+
+# SNS subscription — set to false after clicking the confirmation email link
+manage_email_subscription = true
+
+# ECS scaling
+desired_count                   = 2
+min_instances                   = 1
+max_instances                   = 2
+managed_scaling_target_capacity = 85

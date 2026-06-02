@@ -281,7 +281,4 @@ terraform destroy -var 'grafana_admin_password=YOUR_PASSWORD'
 ## 14. Documentation
 
 - [docs/runbook.md](docs/runbook.md) — Alert playbooks for all 14 alarms
-- [docs/slo-definitions.md](docs/slo-definitions.md) — SLO targets and error budget policy
-- [docs/escalation-flow.md](docs/escalation-flow.md) — Severity definitions and escalation matrix
-- [docs/incident-template.md](docs/incident-template.md) — Post-mortem template
 - [dashboards/wordpress-overview.json](dashboards/wordpress-overview.json) — Grafana dashboard (auto-provisioned)
