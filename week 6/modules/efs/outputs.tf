@@ -22,13 +22,3 @@ output "prometheus_access_point_arn" {
   description = "EFS access point ARN for Prometheus — used in the EFS resource policy ALLOW statement."
   value       = aws_efs_access_point.prometheus.arn
 }
-
-output "grafana_access_point_id" {
-  description = "EFS access point ID for Grafana persistent data — passed to the Grafana ECS task definition volume configuration."
-  value       = aws_efs_access_point.grafana.id
-}
-
-output "grafana_access_point_arn" {
-  description = "EFS access point ARN for Grafana — used in the EFS resource policy ALLOW statement."
-  value       = aws_efs_access_point.grafana.arn
-}

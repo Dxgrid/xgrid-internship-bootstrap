@@ -32,9 +32,3 @@ variable "prometheus_task_role_arn" {
   type        = string
   default     = ""
 }
-
-variable "grafana_task_role_arn" {
-  description = "Grafana ECS task role ARN added to the EFS resource policy. Leave empty until the Grafana module is applied."
-  type        = string
-  default     = ""
-}

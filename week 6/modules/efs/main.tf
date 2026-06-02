@@ -39,23 +39,6 @@ resource "aws_efs_access_point" "prometheus" {
   })
 }
 
-# UID 472 matches the user the official grafana/grafana image runs as.
-resource "aws_efs_access_point" "grafana" {
-  file_system_id = aws_efs_file_system.main.id
-
-  root_directory {
-    path = "/grafana"
-    creation_info {
-      owner_gid   = 472
-      owner_uid   = 472
-      permissions = "755"
-    }
-  }
-
-  tags = merge(local.default_tags, {
-    Name = "${var.project_name}-${var.environment}-grafana-ap"
-  })
-}
 
 resource "aws_efs_mount_target" "main" {
   count           = length(var.private_subnet_ids)
@@ -74,9 +57,8 @@ resource "aws_efs_backup_policy" "main" {
   }
 }
 
-# DenyUnencryptedTransport is always present. AllowPrometheusMount and AllowGrafanaMount
-# are injected only when the respective task role ARNs are provided — avoids a chicken-and-egg
-# error on the first apply before the Prometheus/Grafana modules have created their task roles.
+# DenyUnencryptedTransport is always present. AllowPrometheusMount is injected only when
+# prometheus_task_role_arn is provided — avoids a chicken-and-egg error on first apply.
 resource "aws_efs_file_system_policy" "main" {
   file_system_id = aws_efs_file_system.main.id
 
@@ -113,25 +95,6 @@ resource "aws_efs_file_system_policy" "main" {
           Condition = {
             StringEquals = {
               "elasticfilesystem:AccessPointArn" = aws_efs_access_point.prometheus.arn
-            }
-          }
-        }
-      ] : [],
-      var.grafana_task_role_arn != "" ? [
-        {
-          Sid    = "AllowGrafanaMount"
-          Effect = "Allow"
-          Principal = {
-            AWS = var.grafana_task_role_arn
-          }
-          Action = [
-            "elasticfilesystem:ClientMount",
-            "elasticfilesystem:ClientWrite"
-          ]
-          Resource = aws_efs_file_system.main.arn
-          Condition = {
-            StringEquals = {
-              "elasticfilesystem:AccessPointArn" = aws_efs_access_point.grafana.arn
             }
           }
         }
