@@ -1,0 +1,204 @@
+{
+  "uid": "temporal-slo",
+  "title": "Temporal SRE — SLOs & Golden Signals",
+  "tags": ["temporal", "slo", "sre"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "30s",
+  "time": { "from": "now-6h", "to": "now" },
+  "templating": { "list": [] },
+  "annotations": { "list": [] },
+  "panels": [
+    { "type": "row", "title": "SLO Overview", "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 }, "id": 1 },
+    {
+      "type": "stat", "title": "Workflow Success Rate (SLI, server)", "id": 2,
+      "gridPos": { "h": 6, "w": 6, "x": 0, "y": 1 },
+      "datasource": { "type": "prometheus", "uid": "temporalprom" },
+      "fieldConfig": { "defaults": { "unit": "percentunit", "min": 0, "max": 1,
+        "thresholds": { "mode": "absolute", "steps": [
+          { "color": "red", "value": null }, { "color": "yellow", "value": 0.99 }, { "color": "green", "value": 0.995 } ] } }, "overrides": [] },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background", "graphMode": "area" },
+      "targets": [ { "refId": "A", "datasource": { "type": "prometheus", "uid": "temporalprom" }, "expr": "temporal:workflow_success_rate:ratio_rate5m" } ]
+    },
+    {
+      "type": "gauge", "title": "Error Budget Remaining (vs 99% SLO)", "id": 3,
+      "gridPos": { "h": 6, "w": 6, "x": 6, "y": 1 },
+      "datasource": { "type": "prometheus", "uid": "temporalprom" },
+      "fieldConfig": { "defaults": { "unit": "percentunit", "min": 0, "max": 1,
+        "thresholds": { "mode": "absolute", "steps": [
+          { "color": "red", "value": null }, { "color": "yellow", "value": 0.25 }, { "color": "green", "value": 0.5 } ] } }, "overrides": [] },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "showThresholdLabels": false },
+      "targets": [ { "refId": "A", "datasource": { "type": "prometheus", "uid": "temporalprom" }, "expr": "clamp_min(1 - ((1 - temporal:workflow_success_rate:ratio_rate5m) / (1 - 0.99)), 0)" } ]
+    },
+    {
+      "type": "stat", "title": "Activity Schedule-to-Start p95 (ms)", "id": 4,
+      "gridPos": { "h": 6, "w": 6, "x": 12, "y": 1 },
+      "datasource": { "type": "prometheus", "uid": "temporalprom" },
+      "fieldConfig": { "defaults": { "unit": "ms",
+        "thresholds": { "mode": "absolute", "steps": [
+          { "color": "green", "value": null }, { "color": "yellow", "value": 100 }, { "color": "red", "value": 150 } ] } }, "overrides": [] },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background", "graphMode": "area" },
+      "targets": [ { "refId": "A", "datasource": { "type": "prometheus", "uid": "temporalprom" }, "expr": "histogram_quantile(0.95, sum(rate(temporal_activity_schedule_to_start_latency_bucket[5m])) by (le))" } ]
+    },
+    {
+      "type": "stat", "title": "Poll Sync Rate (min, server)", "id": 5,
+      "gridPos": { "h": 6, "w": 6, "x": 18, "y": 1 },
+      "datasource": { "type": "prometheus", "uid": "temporalprom" },
+      "fieldConfig": { "defaults": { "unit": "percentunit", "min": 0, "max": 1,
+        "thresholds": { "mode": "absolute", "steps": [
+          { "color": "red", "value": null }, { "color": "yellow", "value": 0.95 }, { "color": "green", "value": 0.99 } ] } }, "overrides": [] },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background", "graphMode": "area" },
+      "targets": [ { "refId": "A", "datasource": { "type": "prometheus", "uid": "temporalprom" }, "expr": "min(temporal:poll_sync_rate:ratio_rate5m)" } ]
+    },
+
+    { "type": "row", "title": "Golden Signals (worker SDK, by type)", "gridPos": { "h": 1, "w": 24, "x": 0, "y": 7 }, "id": 10 },
+    {
+      "type": "timeseries", "title": "Workflow Throughput (completed vs failed)", "id": 11,
+      "gridPos": { "h": 7, "w": 12, "x": 0, "y": 8 },
+      "datasource": { "type": "prometheus", "uid": "temporalprom" },
+      "fieldConfig": { "defaults": { "unit": "ops" }, "overrides": [] },
+      "targets": [
+        { "refId": "A", "datasource": { "type": "prometheus", "uid": "temporalprom" }, "expr": "sum(rate(temporal_workflow_completed[5m])) by (workflow_type)", "legendFormat": "completed {{workflow_type}}" },
+        { "refId": "B", "datasource": { "type": "prometheus", "uid": "temporalprom" }, "expr": "sum(rate(temporal_workflow_failed[5m])) by (workflow_type)", "legendFormat": "failed {{workflow_type}}" }
+      ]
+    },
+    {
+      "type": "timeseries", "title": "Activity Schedule-to-Start Latency (ms)", "id": 12,
+      "gridPos": { "h": 7, "w": 12, "x": 12, "y": 8 },
+      "datasource": { "type": "prometheus", "uid": "temporalprom" },
+      "fieldConfig": { "defaults": { "unit": "ms" }, "overrides": [] },
+      "targets": [
+        { "refId": "A", "datasource": { "type": "prometheus", "uid": "temporalprom" }, "expr": "histogram_quantile(0.50, sum(rate(temporal_activity_schedule_to_start_latency_bucket[5m])) by (le))", "legendFormat": "p50" },
+        { "refId": "B", "datasource": { "type": "prometheus", "uid": "temporalprom" }, "expr": "histogram_quantile(0.95, sum(rate(temporal_activity_schedule_to_start_latency_bucket[5m])) by (le))", "legendFormat": "p95" },
+        { "refId": "C", "datasource": { "type": "prometheus", "uid": "temporalprom" }, "expr": "histogram_quantile(0.99, sum(rate(temporal_activity_schedule_to_start_latency_bucket[5m])) by (le))", "legendFormat": "p99" }
+      ]
+    },
+    {
+      "type": "timeseries", "title": "Workflow Task Failures by Type (non-determinism canary)", "id": 13,
+      "gridPos": { "h": 7, "w": 12, "x": 0, "y": 15 },
+      "datasource": { "type": "prometheus", "uid": "temporalprom" },
+      "fieldConfig": { "defaults": { "unit": "ops" }, "overrides": [] },
+      "targets": [ { "refId": "A", "datasource": { "type": "prometheus", "uid": "temporalprom" }, "expr": "sum(rate(temporal_workflow_task_execution_failed[5m])) by (workflow_type)", "legendFormat": "{{workflow_type}}" } ]
+    },
+    {
+      "type": "timeseries", "title": "Final Activity Failures by Type", "id": 14,
+      "gridPos": { "h": 7, "w": 12, "x": 12, "y": 15 },
+      "datasource": { "type": "prometheus", "uid": "temporalprom" },
+      "fieldConfig": { "defaults": { "unit": "ops" }, "overrides": [] },
+      "targets": [ { "refId": "A", "datasource": { "type": "prometheus", "uid": "temporalprom" }, "expr": "sum(rate(temporal_activity_execution_failed[5m])) by (activity_type)", "legendFormat": "{{activity_type}}" } ]
+    },
+
+    { "type": "row", "title": "Worker Health & Saturation", "gridPos": { "h": 1, "w": 24, "x": 0, "y": 22 }, "id": 20 },
+    {
+      "type": "timeseries", "title": "Slot Utilization % by worker_type", "id": 21,
+      "gridPos": { "h": 7, "w": 12, "x": 0, "y": 23 },
+      "datasource": { "type": "prometheus", "uid": "temporalprom" },
+      "fieldConfig": { "defaults": { "unit": "percent", "min": 0, "max": 100 }, "overrides": [] },
+      "targets": [ { "refId": "A", "datasource": { "type": "prometheus", "uid": "temporalprom" }, "expr": "100 * sum(temporal_worker_task_slots_used) by (worker_type) / (sum(temporal_worker_task_slots_used) by (worker_type) + sum(temporal_worker_task_slots_available) by (worker_type))", "legendFormat": "{{worker_type}}" } ]
+    },
+    {
+      "type": "timeseries", "title": "Worker gRPC Request Failures", "id": 22,
+      "gridPos": { "h": 7, "w": 12, "x": 12, "y": 23 },
+      "datasource": { "type": "prometheus", "uid": "temporalprom" },
+      "fieldConfig": { "defaults": { "unit": "ops" }, "overrides": [] },
+      "targets": [
+        { "refId": "A", "datasource": { "type": "prometheus", "uid": "temporalprom" }, "expr": "sum(rate(temporal_request_failure[5m]))", "legendFormat": "request_failure" },
+        { "refId": "B", "datasource": { "type": "prometheus", "uid": "temporalprom" }, "expr": "sum(rate(temporal_long_request_failure[5m]))", "legendFormat": "long_request_failure" }
+      ]
+    },
+    {
+      "type": "stat", "title": "Active Workers", "id": 23,
+      "gridPos": { "h": 7, "w": 6, "x": 0, "y": 30 },
+      "datasource": { "type": "prometheus", "uid": "temporalprom" },
+      "fieldConfig": { "defaults": { "unit": "short",
+        "thresholds": { "mode": "absolute", "steps": [ { "color": "red", "value": null }, { "color": "yellow", "value": 1 }, { "color": "green", "value": 2 } ] } }, "overrides": [] },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" },
+      "targets": [ { "refId": "A", "datasource": { "type": "prometheus", "uid": "temporalprom" }, "expr": "count(up{job=\"temporal-worker\"} == 1)" } ]
+    },
+    {
+      "type": "timeseries", "title": "Sticky Cache (size + hit/miss rate)", "id": 24,
+      "gridPos": { "h": 7, "w": 18, "x": 6, "y": 30 },
+      "datasource": { "type": "prometheus", "uid": "temporalprom" },
+      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+      "targets": [
+        { "refId": "A", "datasource": { "type": "prometheus", "uid": "temporalprom" }, "expr": "max(temporal_sticky_cache_size)", "legendFormat": "cache size" },
+        { "refId": "B", "datasource": { "type": "prometheus", "uid": "temporalprom" }, "expr": "sum(rate(temporal_sticky_cache_hit[5m]))", "legendFormat": "hit/s" },
+        { "refId": "C", "datasource": { "type": "prometheus", "uid": "temporalprom" }, "expr": "sum(rate(temporal_sticky_cache_miss[5m]))", "legendFormat": "miss/s" }
+      ]
+    },
+
+    { "type": "row", "title": "Server Health (self-hosted OSS only — :8001)", "gridPos": { "h": 1, "w": 24, "x": 0, "y": 37 }, "id": 30 },
+    {
+      "type": "timeseries", "title": "Service Latency p95 by operation (s)", "id": 31,
+      "gridPos": { "h": 7, "w": 12, "x": 0, "y": 38 },
+      "datasource": { "type": "prometheus", "uid": "temporalprom" },
+      "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] },
+      "targets": [ { "refId": "A", "datasource": { "type": "prometheus", "uid": "temporalprom" }, "expr": "histogram_quantile(0.95, sum(rate(persistence_latency_bucket[5m])) by (le))", "legendFormat": "persistence" } ]
+    },
+    {
+      "type": "timeseries", "title": "Poll Sync Rate by task_type", "id": 32,
+      "gridPos": { "h": 7, "w": 12, "x": 12, "y": 38 },
+      "datasource": { "type": "prometheus", "uid": "temporalprom" },
+      "fieldConfig": { "defaults": { "unit": "percentunit", "min": 0, "max": 1 }, "overrides": [] },
+      "targets": [ { "refId": "A", "datasource": { "type": "prometheus", "uid": "temporalprom" }, "expr": "temporal:poll_sync_rate:ratio_rate5m", "legendFormat": "{{task_type}}" } ]
+    },
+    {
+      "type": "timeseries", "title": "Persistence Latency p95 (s)", "id": 33,
+      "gridPos": { "h": 7, "w": 12, "x": 0, "y": 45 },
+      "datasource": { "type": "prometheus", "uid": "temporalprom" },
+      "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] },
+      "targets": [ { "refId": "A", "datasource": { "type": "prometheus", "uid": "temporalprom" }, "expr": "histogram_quantile(0.95, sum(rate(persistence_latency_bucket[5m])) by (operation, le))", "legendFormat": "{{operation}}" } ]
+    },
+    {
+      "type": "timeseries", "title": "Server Resource Exhausted by cause", "id": 34,
+      "gridPos": { "h": 7, "w": 12, "x": 12, "y": 45 },
+      "datasource": { "type": "prometheus", "uid": "temporalprom" },
+      "fieldConfig": { "defaults": { "unit": "ops" }, "overrides": [] },
+      "targets": [ { "refId": "A", "datasource": { "type": "prometheus", "uid": "temporalprom" }, "expr": "sum(rate(service_errors_resource_exhausted[5m])) by (resource_exhausted_cause)", "legendFormat": "{{resource_exhausted_cause}}" } ]
+    },
+
+    { "type": "row", "title": "Infrastructure (node_exporter)", "gridPos": { "h": 1, "w": 24, "x": 0, "y": 52 }, "id": 40 },
+    {
+      "type": "timeseries", "title": "CPU % per host", "id": 41,
+      "gridPos": { "h": 7, "w": 8, "x": 0, "y": 53 },
+      "datasource": { "type": "prometheus", "uid": "temporalprom" },
+      "fieldConfig": { "defaults": { "unit": "percent", "min": 0, "max": 100 }, "overrides": [] },
+      "targets": [ { "refId": "A", "datasource": { "type": "prometheus", "uid": "temporalprom" }, "expr": "instance:node_cpu_utilisation:rate5m", "legendFormat": "{{instance}}" } ]
+    },
+    {
+      "type": "timeseries", "title": "Memory % per host", "id": 42,
+      "gridPos": { "h": 7, "w": 8, "x": 8, "y": 53 },
+      "datasource": { "type": "prometheus", "uid": "temporalprom" },
+      "fieldConfig": { "defaults": { "unit": "percent", "min": 0, "max": 100 }, "overrides": [] },
+      "targets": [ { "refId": "A", "datasource": { "type": "prometheus", "uid": "temporalprom" }, "expr": "100 * instance:node_memory_utilisation:ratio", "legendFormat": "{{instance}}" } ]
+    },
+    {
+      "type": "timeseries", "title": "Root Disk % per host", "id": 43,
+      "gridPos": { "h": 7, "w": 8, "x": 16, "y": 53 },
+      "datasource": { "type": "prometheus", "uid": "temporalprom" },
+      "fieldConfig": { "defaults": { "unit": "percent", "min": 0, "max": 100 }, "overrides": [] },
+      "targets": [ { "refId": "A", "datasource": { "type": "prometheus", "uid": "temporalprom" }, "expr": "100 * (1 - node_filesystem_avail_bytes{mountpoint=\"/\",fstype!~\"tmpfs|overlay\"} / node_filesystem_size_bytes{mountpoint=\"/\",fstype!~\"tmpfs|overlay\"})", "legendFormat": "{{instance}}" } ]
+    },
+
+    { "type": "row", "title": "SLO Burn Rate (multi-window)", "gridPos": { "h": 1, "w": 24, "x": 0, "y": 60 }, "id": 50 },
+    {
+      "type": "timeseries", "title": "Fast Burn — 1h error rate vs 14.4x budget", "id": 51,
+      "gridPos": { "h": 7, "w": 12, "x": 0, "y": 61 },
+      "datasource": { "type": "prometheus", "uid": "temporalprom" },
+      "fieldConfig": { "defaults": { "unit": "percentunit",
+        "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "red", "value": 0.144 } ] },
+        "custom": { "thresholdsStyle": { "mode": "line" } } }, "overrides": [] },
+      "targets": [ { "refId": "A", "datasource": { "type": "prometheus", "uid": "temporalprom" }, "expr": "temporal:workflow_error_rate:ratio_rate1h", "legendFormat": "1h error rate" } ]
+    },
+    {
+      "type": "timeseries", "title": "Slow Burn — 6h error rate vs 6x budget", "id": 52,
+      "gridPos": { "h": 7, "w": 12, "x": 12, "y": 61 },
+      "datasource": { "type": "prometheus", "uid": "temporalprom" },
+      "fieldConfig": { "defaults": { "unit": "percentunit",
+        "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "red", "value": 0.06 } ] },
+        "custom": { "thresholdsStyle": { "mode": "line" } } }, "overrides": [] },
+      "targets": [ { "refId": "A", "datasource": { "type": "prometheus", "uid": "temporalprom" }, "expr": "temporal:workflow_error_rate:ratio_rate6h", "legendFormat": "6h error rate" } ]
+    }
+  ]
+}

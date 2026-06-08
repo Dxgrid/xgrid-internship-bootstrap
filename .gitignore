@@ -15,3 +15,11 @@
 # OS files
 .DS_Store
 .env
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Editor / agent
+.vscode/
+.claude/

@@ -1,0 +1,30 @@
+# Week 4 Temporal Order Management — Terraform Variables Example
+# Copy to terraform.tfvars and fill in your values
+
+project_name   = "temporal-order"
+environment    = "dev"
+aws_region     = "us-east-1"
+
+# VPC Configuration — Matches Week 3 pattern
+vpc_cidr             = "10.0.0.0/16"
+public_subnet_cidrs  = ["10.0.1.0/24", "10.0.2.0/24"]
+private_subnet_cidrs = ["10.0.3.0/24", "10.0.4.0/24"]
+
+# RDS Temporal Database
+db_username = "temporal"
+db_password = "ChangeMe@12345"  # IMPORTANT: Set a strong password
+
+# Temporal Server Configuration
+temporal_server_address = "temporal-server:7233"  # Will be set to private IP after deployment
+
+# ECR Configuration
+ecr_image_scan = true
+
+# ECS Task Scaling
+desired_api_count    = 1
+desired_worker_count = 1
+
+# Container Ports (Usually don't change these)
+api_container_port          = 8000
+temporal_ui_container_port  = 8080
+temporal_grpc_port          = 7233

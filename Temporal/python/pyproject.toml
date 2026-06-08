@@ -1,0 +1,14 @@
+[project]
+name = "order-management-app-python"
+version = "0.1.0"
+description = "Python Backend for Order Management App"
+requires-python = ">=3.11"
+dependencies = [
+    "temporalio>=1.21.1",
+    "httpx>=0.27.0",
+    "fastapi>=0.109.0",
+    "uvicorn>=0.27.0",
+    "python-dotenv>=1.0.0",
+    "dataclasses-json>=0.6.3",
+    "aiofiles>=23.2.1",
+]
